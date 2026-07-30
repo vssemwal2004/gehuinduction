@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { zipSync, strToU8 } from 'fflate';
 import ImportJob from '../models/ImportJob.js';
 import Student from '../models/Student.js';
-import { createQrToken, decryptQrToken } from '../services/qrTokenService.js';
+import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
 import { createStudentQrCard } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
 import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
@@ -13,16 +13,26 @@ const TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code'],
   ['Example Student', 'GEU2026001', 'student@example.com', 'G1'],
 ];
+const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
 function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
 }
 
 async function ensureQrToken(student) {
-  if (student.qrTokenEncrypted) return decryptQrToken(student.qrTokenEncrypted);
+  return (await ensureQrData(student)).token;
+}
+
+async function ensureQrData(student) {
+  if (student.qrTokenEncrypted) {
+    const token = decryptQrToken(student.qrTokenEncrypted);
+    const tokenHash = student.qrTokenHash || hashQrToken(token);
+    if (!student.qrTokenHash) await Student.updateOne({ _id: student._id }, { qrTokenHash: tokenHash });
+    return { token, tokenHash };
+  }
   const qr = createQrToken();
   await Student.updateOne({ _id: student._id }, { qrTokenHash: qr.tokenHash, qrTokenEncrypted: qr.tokenEncrypted, qrGeneratedAt: new Date() });
-  return qr.token;
+  return { token: qr.token, tokenHash: qr.tokenHash };
 }
 
 function groupFilterFromRequest(req) {
@@ -113,7 +123,7 @@ export async function listImportHistory(_req, res) {
 
 export async function exportStudentsExcel(req, res) {
   const students = await Student.find(groupFilterFromRequest(req))
-    .select('+qrTokenEncrypted name studentId email groupIds groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile email')
     .sort({ studentId: 1 })
@@ -121,24 +131,29 @@ export async function exportStudentsExcel(req, res) {
   if (!students.length) throw new HttpError(404, 'No students found for this export');
 
   const rows = [
-    ['Student Name', 'Student ID', 'Email', 'Group Codes', 'Group Names', 'WhatsApp Links', 'Coordinator', 'Coordinator Mobile', 'Coordinator Email', 'Registration Status', 'Active', 'Scan Count', 'Last Scan', 'QR Generated At', 'QR Revoked At', 'Created At', 'Updated At', 'QR Code'],
+    ['Student Name', 'Student ID', 'Email', 'Group Codes', 'Group Names', 'WhatsApp Links', 'Coordinator', 'Coordinator Mobile', 'Coordinator Email', 'Registration Status', 'Active', 'Scan Count', 'Last Scan', 'QR Generated At', 'QR Revoked At', 'Created At', 'Updated At', 'QR Link', 'QR Code'],
   ];
   const imagesByRow = new Map();
+  const qrLinksByRow = new Map();
   const batchSize = 20;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student, batchIndex) => {
       if (!student.isActive || student.qrRevokedAt) return null;
-      const token = await ensureQrToken(student);
-      const image = await QRCode.toBuffer(`GEUQR1:${token}`, { type: 'png', errorCorrectionLevel: 'M', width: 240, margin: 1 });
-      return { rowIndex: index + batchIndex + 1, image };
+      const qr = await ensureQrData(student);
+      const image = await QRCode.toBuffer(`GEUQR1:${qr.token}`, { type: 'png', errorCorrectionLevel: 'M', width: 240, margin: 1 });
+      return { rowIndex: index + batchIndex + 1, image, link: `${QR_LINK_BASE}${qr.tokenHash}` };
     }));
     generated.forEach((item) => {
-      if (item) imagesByRow.set(item.rowIndex, { name: `qr-${item.rowIndex}.png`, buffer: item.image });
+      if (item) {
+        imagesByRow.set(item.rowIndex, { name: `qr-${item.rowIndex}.png`, buffer: item.image });
+        qrLinksByRow.set(item.rowIndex, item.link);
+      }
     });
   }
 
-  students.forEach((student) => {
+  students.forEach((student, index) => {
+    const rowIndex = index + 1;
     const groups = student.groupIds || [];
     rows.push([
       student.name,
@@ -158,6 +173,7 @@ export async function exportStudentsExcel(req, res) {
       student.qrRevokedAt ? new Date(student.qrRevokedAt).toISOString() : '',
       student.createdAt ? new Date(student.createdAt).toISOString() : '',
       student.updatedAt ? new Date(student.updatedAt).toISOString() : '',
+      student.isActive && !student.qrRevokedAt ? qrLinksByRow.get(rowIndex) || '' : 'Inactive',
       student.isActive && !student.qrRevokedAt ? 'QR image' : 'Inactive',
     ]);
   });
@@ -170,26 +186,26 @@ export async function exportStudentsExcel(req, res) {
 
 export async function downloadQrPackage(req, res) {
   const students = await Student.find({ ...groupFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
-    .select('+qrTokenEncrypted name studentId email registrationStatus')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email registrationStatus')
     .populate('groupIds', 'name code')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
   const files = {};
-  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Group', 'QR File Name']];
+  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Group', 'QR Link', 'QR File Name']];
   const batchSize = 20;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
-      const fileName = `${safeFileName(student.studentId)}_${safeFileName(student.name)}.png`;
-      const token = await ensureQrToken(student);
-      const image = await createStudentQrCard(token);
+      const qr = await ensureQrData(student);
+      const fileName = `${qr.tokenHash}.png`;
+      const image = await createStudentQrCard(qr.token);
       return { student, fileName, image };
     }));
     generated.forEach(({ student, fileName, image }) => {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.email, student.groupIds.map((group) => group.code).join(', '), fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, student.groupIds.map((group) => group.code).join(', '), `${QR_LINK_BASE}${fileName.replace(/\.png$/, '')}`, fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
@@ -203,7 +219,7 @@ export async function downloadQrPackage(req, res) {
 export async function downloadStudentQr(req, res) {
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findById(req.params.studentId)
-    .select('+qrTokenEncrypted name studentId isActive qrRevokedAt')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId isActive qrRevokedAt')
     .lean();
   if (!student) throw new HttpError(404, 'Student not found');
   if (!student.isActive || student.qrRevokedAt) throw new HttpError(400, 'QR is unavailable for inactive students');
