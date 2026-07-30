@@ -14,6 +14,7 @@ import rateLimit from 'express-rate-limit';
 import {
   commitStudentImport,
   downloadQrPackage,
+  downloadStudentQr,
   downloadStudentTemplate,
   exportStudentsExcel,
   listImportHistory,
@@ -38,6 +39,7 @@ router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler
 router.get('/import/history', asyncHandler(listImportHistory));
 router.get('/export.xlsx', asyncHandler(exportStudentsExcel));
 router.get('/qr-package.zip', qrPackageLimiter, asyncHandler(downloadQrPackage));
+router.get('/:studentId/qr.png', asyncHandler(downloadStudentQr));
 router.get('/', asyncHandler(listStudents));
 router.post('/', asyncHandler(createStudent));
 router.get('/:studentId', asyncHandler(getStudent));

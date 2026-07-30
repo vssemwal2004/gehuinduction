@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, Search, Upload, UserRoundCheck, UserRoundX, X } from 'lucide-react';
+import { CheckCircle2, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, QrCode, Search, Upload, UserRoundCheck, UserRoundX, X } from 'lucide-react';
 import { api, downloadApiFile } from '../lib/api';
 
 const emptyForm = { name: '', studentId: '', email: '', groupIds: [], groupCoordinatorName: '', groupCoordinatorMobile: '' };
@@ -124,7 +124,6 @@ export default function StudentsPage() {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
-  const [globalMenu, setGlobalMenu] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -156,6 +155,22 @@ export default function StudentsPage() {
     const start = (pagination.page - 1) * pagination.limit + 1;
     return `${start}–${Math.min(start + students.length - 1, pagination.total)} of ${pagination.total}`;
   }, [pagination, students.length]);
+  const activeMenuStudent = useMemo(() => students.find((student) => student._id === openMenu?.studentId), [openMenu, students]);
+
+  function openStudentMenu(student, event) {
+    if (openMenu?.studentId === student._id) {
+      setOpenMenu(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 192;
+    const menuHeight = 176;
+    setOpenMenu({
+      studentId: student._id,
+      left: Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth)),
+      top: Math.max(8, Math.min(window.innerHeight - menuHeight - 8, rect.bottom + 6)),
+    });
+  }
 
   function edit(student) {
     setEditing({ ...student, groupIds: student.groupIds?.map((group) => group._id) || [] });
@@ -176,7 +191,7 @@ export default function StudentsPage() {
   }
 
   async function download(path, fileName) {
-    setGlobalMenu(false);
+    setOpenMenu(null);
     setError('');
     try {
       await downloadApiFile(path, fileName);
@@ -185,15 +200,23 @@ export default function StudentsPage() {
     }
   }
 
+  function exportPath(path) {
+    const params = new URLSearchParams();
+    if (filters.groupId) params.set('groupId', filters.groupId);
+    const query = params.toString();
+    return query ? `${path}?${query}` : path;
+  }
+
   return <div className="space-y-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold">Students</h1><p className="mt-1 text-xs text-slate-500">Manage student records, groups and QR registration status.</p></div><div className="flex gap-2"><div className="relative"><button onClick={() => setGlobalMenu((value) => !value)} className="h-9 rounded-md border border-slate-300 px-2.5 text-slate-600 hover:bg-slate-50" aria-label="More student actions" aria-expanded={globalMenu}><MoreVertical size={17}/></button>{globalMenu ? <div className="absolute right-0 top-11 z-20 w-56 rounded-md border border-slate-200 bg-white p-1 text-left text-sm shadow-lg"><button onClick={() => { setBulkOpen(true); setGlobalMenu(false); }} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Upload size={14}/>Bulk import students</button><button onClick={() => download('/students/export.xlsx', 'geu-induction-students.xlsx')} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><FileSpreadsheet size={14}/>Export students Excel</button><button onClick={() => download('/students/qr-package.zip', 'geu-induction-qr-package.zip')} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Download size={14}/>Download QR package</button></div> : null}</div><button onClick={() => { setEditing(null); setFormOpen(true); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16}/>Add student</button></div></div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold">Students</h1><p className="mt-1 text-xs text-slate-500">Manage student records, groups and QR registration status.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => { setBulkOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Bulk import students</button><button onClick={() => download(exportPath('/students/export.xlsx'), 'geu-induction-students.xlsx')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><FileSpreadsheet size={15}/>{filters.groupId ? 'Export selected group data' : 'Export all student data'}</button><button onClick={() => download(exportPath('/students/qr-package.zip'), 'geu-induction-qr-package.zip')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><QrCode size={15}/>{filters.groupId ? 'Bulk download group QR' : 'Bulk download all QR'}</button><button onClick={() => { setEditing(null); setFormOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16}/>Add student</button></div></div>
     {notice ? <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div> : null}
     {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-[1fr_180px_200px]"><label className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/><input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="h-9 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm" placeholder="Search name, student ID or email"/></label><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All statuses</option><option value="not_registered">Not registered</option><option value="registered">Registered</option><option value="inactive">Inactive</option></select><select value={filters.groupId} onChange={(e) => setFilters({ ...filters, groupId: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All groups</option>{groups.map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left"><thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Student</th><th className="px-4 py-3 font-semibold">Student ID</th><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Coordinator</th><th className="px-4 py-3 font-semibold">Status</th><th className="px-4 py-3 font-semibold">Last scan</th><th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">Loading students…</td></tr> : students.length ? students.map((student) => <tr key={student._id} className="text-sm hover:bg-slate-50/70"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{student.name}</div><div className="mt-0.5 text-xs text-slate-500">{student.email}</div></td><td className="px-4 py-3 text-slate-600">{student.studentId}</td><td className="px-4 py-3 text-slate-600">{student.groupIds?.map((group) => group.code).join(', ') || '—'}</td><td className="px-4 py-3"><div className="text-slate-700">{student.groupCoordinatorId?.name || 'Not assigned'}</div><div className="text-xs text-slate-500">{student.groupCoordinatorId?.mobile || ''}</div></td><td className="px-4 py-3"><StatusBadge student={student}/></td><td className="px-4 py-3 text-xs text-slate-600">{student.lastScannedAt ? new Date(student.lastScannedAt).toLocaleString() : 'Never'}</td><td className="relative px-4 py-3 text-right"><button onClick={() => setOpenMenu(openMenu === student._id ? null : student._id)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={`Actions for ${student.name}`}><MoreVertical size={16}/></button>{openMenu === student._id ? <div className="absolute right-8 top-10 z-20 w-44 rounded-md border border-slate-200 bg-white p-1 text-left text-sm shadow-lg"><button onClick={() => { setViewing(student); setOpenMenu(null); }} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Eye size={14}/>View details</button><button onClick={() => edit(student)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Pencil size={14}/>Edit student</button><button onClick={() => toggleActive(student)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50">{student.isActive && student.registrationStatus !== 'inactive' ? <><UserRoundX size={14}/>Deactivate</> : <><UserRoundCheck size={14}/>Reactivate</>}</button></div> : null}</td></tr>) : <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">No students found.</td></tr>}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left"><thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Student</th><th className="px-4 py-3 font-semibold">Student ID</th><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Coordinator</th><th className="px-4 py-3 font-semibold">Status</th><th className="px-4 py-3 font-semibold">Last scan</th><th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">Loading students…</td></tr> : students.length ? students.map((student) => <tr key={student._id} className="text-sm hover:bg-slate-50/70"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{student.name}</div><div className="mt-0.5 text-xs text-slate-500">{student.email}</div></td><td className="px-4 py-3 text-slate-600">{student.studentId}</td><td className="px-4 py-3 text-slate-600">{student.groupIds?.map((group) => group.code).join(', ') || '—'}</td><td className="px-4 py-3"><div className="text-slate-700">{student.groupCoordinatorId?.name || 'Not assigned'}</div><div className="text-xs text-slate-500">{student.groupCoordinatorId?.mobile || ''}</div></td><td className="px-4 py-3"><StatusBadge student={student}/></td><td className="px-4 py-3 text-xs text-slate-600">{student.lastScannedAt ? new Date(student.lastScannedAt).toLocaleString() : 'Never'}</td><td className="px-4 py-3 text-right"><button onClick={(event) => openStudentMenu(student, event)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={`Actions for ${student.name}`} aria-expanded={openMenu?.studentId === student._id}><MoreVertical size={16}/></button></td></tr>) : <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">No students found.</td></tr>}</tbody></table></div>
       <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>{range}</span><div className="flex gap-2"><button disabled={pagination.page <= 1 || loading} onClick={() => load(pagination.page - 1)} className="h-8 rounded-md border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-40">Previous</button><button disabled={pagination.page >= pagination.pages || loading} onClick={() => load(pagination.page + 1)} className="h-8 rounded-md border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-40">Next</button></div></div>
     </div>
+    {openMenu && activeMenuStudent ? <><button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Close student actions" onClick={() => setOpenMenu(null)}/><div className="fixed z-50 w-48 rounded-md border border-slate-200 bg-white p-1 text-left text-sm shadow-lg" style={{ left: openMenu.left, top: openMenu.top }}><button onClick={() => { setViewing(activeMenuStudent); setOpenMenu(null); }} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Eye size={14}/>View details</button><button onClick={() => edit(activeMenuStudent)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Pencil size={14}/>Edit student</button><button onClick={() => download(`/students/${activeMenuStudent._id}/qr.png`, `${activeMenuStudent.studentId}-${activeMenuStudent.name}-qr.png`)} disabled={!activeMenuStudent.isActive || activeMenuStudent.registrationStatus === 'inactive'} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"><QrCode size={14}/>Download QR</button><button onClick={() => toggleActive(activeMenuStudent)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50">{activeMenuStudent.isActive && activeMenuStudent.registrationStatus !== 'inactive' ? <><UserRoundX size={14}/>Deactivate</> : <><UserRoundCheck size={14}/>Reactivate</>}</button></div></> : null}
     {formOpen ? <StudentForm groups={groups} initialValue={editing} onClose={() => setFormOpen(false)} onSaved={() => { setFormOpen(false); load(1); }}/> : null}
     {bulkOpen ? <BulkImportModal onClose={() => setBulkOpen(false)} onImported={(count) => { setBulkOpen(false); setNotice(`${count} students imported successfully.`); load(1); }}/> : null}
     {viewing ? <StudentDetails student={viewing} onClose={() => setViewing(null)}/> : null}

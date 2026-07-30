@@ -3,18 +3,48 @@ import mongoose from 'mongoose';
 import { zipSync, strToU8 } from 'fflate';
 import ImportJob from '../models/ImportJob.js';
 import Student from '../models/Student.js';
-import { createQrToken, decryptQrToken } from '../services/qrTokenService.js';
+import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
+import { createStudentQrCard } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
-import { createSimpleXlsx } from '../utils/xlsx.js';
+import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
 
 const TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
   ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
 ];
+const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
 function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
+}
+
+async function ensureQrToken(student) {
+  return (await ensureQrData(student)).token;
+}
+
+async function ensureQrData(student) {
+  if (student.qrTokenEncrypted) {
+    const token = decryptQrToken(student.qrTokenEncrypted);
+    const tokenHash = student.qrTokenHash || hashQrToken(token);
+    if (!student.qrTokenHash) await Student.updateOne({ _id: student._id }, { qrTokenHash: tokenHash });
+    return { token, tokenHash };
+  }
+  const qr = createQrToken();
+  await Student.updateOne({ _id: student._id }, { qrTokenHash: qr.tokenHash, qrTokenEncrypted: qr.tokenEncrypted, qrGeneratedAt: new Date() });
+  return { token: qr.token, tokenHash: qr.tokenHash };
+}
+
+function groupFilterFromRequest(req) {
+  const groupId = String(req.query.groupId || '').trim();
+  if (!groupId) return {};
+  if (!mongoose.isValidObjectId(groupId)) throw new HttpError(400, 'Invalid group ID');
+  return { groupIds: groupId };
+}
+
+function filteredExportName(prefix, req) {
+  const groupId = String(req.query.groupId || '').trim();
+  return groupId ? `${prefix}-group-${safeFileName(groupId)}` : prefix;
 }
 
 export function downloadStudentTemplate(_req, res) {
@@ -92,55 +122,86 @@ export async function listImportHistory(_req, res) {
   res.json({ imports: jobs });
 }
 
-export async function exportStudentsExcel(_req, res) {
-  const students = await Student.find().populate('groupIds', 'name code').populate('groupCoordinatorId', 'name mobile').sort({ studentId: 1 }).lean();
+export async function exportStudentsExcel(req, res) {
+  const students = await Student.find(groupFilterFromRequest(req))
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
+    .populate('groupIds', 'name code whatsappLink')
+    .populate('groupCoordinatorId', 'name mobile email')
+    .sort({ studentId: 1 })
+    .lean();
+  if (!students.length) throw new HttpError(404, 'No students found for this export');
+
   const rows = [
-    ['Student Name', 'Student ID', 'Email', 'Groups', 'Group Coordinator', 'Group Coordinator Mobile', 'Registration Status', 'QR File Name'],
+    ['Student Name', 'Student ID', 'Email', 'Groups', 'Coordinator', 'Coordinator Mobile', 'Registration Status', 'QR File Name'],
     ...students.map((student) => [
       student.name,
       student.studentId,
       student.email,
       student.groupIds.map((group) => group.code).join(', '),
-      student.groupCoordinatorName || student.groupCoordinatorId?.name || '',
-      student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || '',
+      student.groupCoordinatorId?.name || '',
+      student.groupCoordinatorId?.mobile || '',
       student.registrationStatus,
-      `${safeFileName(student.studentId)}_${safeFileName(student.name)}.png`,
-    ]),
-  ];
-  const workbook = createSimpleXlsx(rows, 'Students');
+      student.isActive ? 'Yes' : 'No',
+      student.scanCount || 0,
+      student.lastScannedAt ? new Date(student.lastScannedAt).toISOString() : '',
+      student.qrGeneratedAt ? new Date(student.qrGeneratedAt).toISOString() : '',
+      student.qrRevokedAt ? new Date(student.qrRevokedAt).toISOString() : '',
+      student.createdAt ? new Date(student.createdAt).toISOString() : '',
+      student.updatedAt ? new Date(student.updatedAt).toISOString() : '',
+      student.isActive && !student.qrRevokedAt ? qrLinksByRow.get(rowIndex) || '' : 'Inactive',
+      student.isActive && !student.qrRevokedAt ? 'QR image' : 'Inactive',
+    ]);
+  });
+
+  const workbook = createXlsxWithImages(rows, imagesByRow, 'Students');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="geu-induction-students.xlsx"');
+  res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-students', req)}.xlsx"`);
   res.send(workbook);
 }
 
-export async function downloadQrPackage(_req, res) {
-  const students = await Student.find({ isActive: true, qrRevokedAt: { $exists: false } })
-    .select('+qrTokenEncrypted name studentId email registrationStatus')
+export async function downloadQrPackage(req, res) {
+  const students = await Student.find({ ...groupFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email registrationStatus')
     .populate('groupIds', 'name code')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
   const files = {};
-  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Group', 'QR File Name']];
+  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Group', 'QR Link', 'QR File Name']];
   const batchSize = 20;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
-      const fileName = `${safeFileName(student.studentId)}_${safeFileName(student.name)}.png`;
-      const token = decryptQrToken(student.qrTokenEncrypted);
-      const image = await QRCode.toBuffer(`GEUQR1:${token}`, { type: 'png', errorCorrectionLevel: 'M', width: 480, margin: 2 });
+      const qr = await ensureQrData(student);
+      const fileName = `${qr.tokenHash}.png`;
+      const image = await createStudentQrCard(qr.token);
       return { student, fileName, image };
     }));
     generated.forEach(({ student, fileName, image }) => {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.email, student.groupIds.map((group) => group.code).join(', '), fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, student.groupIds.map((group) => group.code).join(', '), `${QR_LINK_BASE}${fileName.replace(/\.png$/, '')}`, fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
   files['README.txt'] = strToU8('GEU Induction Programme 2026\nQR images contain secure opaque tokens only. Student data is resolved by the authenticated scan coordinator application.');
   const archive = Buffer.from(zipSync(files, { level: 6 }));
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="geu-induction-qr-package-${Date.now()}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-qr-package', req)}-${Date.now()}.zip"`);
   res.send(archive);
+}
+
+export async function downloadStudentQr(req, res) {
+  if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
+  const student = await Student.findById(req.params.studentId)
+    .select('+qrTokenEncrypted +qrTokenHash name studentId isActive qrRevokedAt')
+    .lean();
+  if (!student) throw new HttpError(404, 'Student not found');
+  if (!student.isActive || student.qrRevokedAt) throw new HttpError(400, 'QR is unavailable for inactive students');
+
+  const token = await ensureQrToken(student);
+  const image = await createStudentQrCard(token);
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFileName(student.studentId)}_${safeFileName(student.name)}.png"`);
+  res.send(image);
 }
