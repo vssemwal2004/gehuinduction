@@ -6,7 +6,9 @@ import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.resolve(__dirname, '../../../frontend/src/img/123.png');
-const qrBox = { x: 546, y: 376, size: 440 };
+// The template is 1024 × 1536. Keep the generated code inside the printed
+// red scanner frame, below the “SCAN ME” label, without covering its border.
+const qrBox = { x: 257, y: 550, size: 510 };
 
 let cachedTemplate;
 
@@ -38,7 +40,13 @@ function drawImage(source, target, box) {
 
 export async function createStudentQrCard(token) {
   const card = template();
-  const qrBuffer = await QRCode.toBuffer(`GEUQR1:${token}`, { type: 'png', errorCorrectionLevel: 'H', width: qrBox.size, margin: 1 });
+  const qrBuffer = await QRCode.toBuffer(`GEUQR1:${token}`, {
+    type: 'png',
+    errorCorrectionLevel: 'H',
+    width: qrBox.size,
+    margin: 2,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
   drawImage(PNG.sync.read(qrBuffer), card, qrBox);
   return PNG.sync.write(card);
 }

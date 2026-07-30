@@ -47,6 +47,12 @@ function filteredExportName(prefix, req) {
   return groupId ? `${prefix}-group-${safeFileName(groupId)}` : prefix;
 }
 
+function groupCodes(student) {
+  return Array.isArray(student.groupIds)
+    ? student.groupIds.map((group) => group?.code).filter(Boolean).join(', ')
+    : '';
+}
+
 export function downloadStudentTemplate(_req, res) {
   const workbook = createSimpleXlsx(TEMPLATE_ROWS, 'Student Import');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -124,7 +130,7 @@ export async function listImportHistory(_req, res) {
 
 export async function exportStudentsExcel(req, res) {
   const students = await Student.find(groupFilterFromRequest(req))
-    .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile email')
     .sort({ studentId: 1 })
@@ -132,14 +138,44 @@ export async function exportStudentsExcel(req, res) {
   if (!students.length) throw new HttpError(404, 'No students found for this export');
 
   const rows = [
-    ['Student Name', 'Student ID', 'Email', 'Groups', 'Coordinator', 'Coordinator Mobile', 'Registration Status', 'QR File Name'],
-    ...students.map((student) => [
+    [
+      'Student Name',
+      'Student ID',
+      'Email',
+      'Groups',
+      'Group Coordinator',
+      'Coordinator Mobile',
+      'Registration Status',
+      'Active',
+      'Scan Count',
+      'Last Scanned At',
+      'QR Generated At',
+      'QR Revoked At',
+      'Created At',
+      'Updated At',
+      'QR Link',
+      'QR Image',
+    ],
+  ];
+  const imagesByRow = new Map();
+  for (const student of students) {
+    const canExportQr = student.isActive && !student.qrRevokedAt;
+    let qrLink = 'Inactive';
+    if (canExportQr) {
+      const qr = await ensureQrData(student);
+      const fileName = `${qr.tokenHash}.png`;
+      qrLink = `${QR_LINK_BASE}${qr.tokenHash}`;
+      const rowIndex = rows.length;
+      const image = await createStudentQrCard(qr.token);
+      imagesByRow.set(rowIndex, { name: fileName, buffer: image });
+    }
+    rows.push([
       student.name,
       student.studentId,
       student.email,
-      student.groupIds.map((group) => group.code).join(', '),
-      student.groupCoordinatorId?.name || '',
-      student.groupCoordinatorId?.mobile || '',
+      groupCodes(student),
+      student.groupCoordinatorName || student.groupCoordinatorId?.name || '',
+      student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || '',
       student.registrationStatus,
       student.isActive ? 'Yes' : 'No',
       student.scanCount || 0,
@@ -148,10 +184,10 @@ export async function exportStudentsExcel(req, res) {
       student.qrRevokedAt ? new Date(student.qrRevokedAt).toISOString() : '',
       student.createdAt ? new Date(student.createdAt).toISOString() : '',
       student.updatedAt ? new Date(student.updatedAt).toISOString() : '',
-      student.isActive && !student.qrRevokedAt ? qrLinksByRow.get(rowIndex) || '' : 'Inactive',
-      student.isActive && !student.qrRevokedAt ? 'QR image' : 'Inactive',
+      qrLink,
+      canExportQr ? 'QR image' : 'Inactive',
     ]);
-  });
+  }
 
   const workbook = createXlsxWithImages(rows, imagesByRow, 'Students');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -180,7 +216,7 @@ export async function downloadQrPackage(req, res) {
     }));
     generated.forEach(({ student, fileName, image }) => {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.email, student.groupIds.map((group) => group.code).join(', '), `${QR_LINK_BASE}${fileName.replace(/\.png$/, '')}`, fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), `${QR_LINK_BASE}${fileName.replace(/\.png$/, '')}`, fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
