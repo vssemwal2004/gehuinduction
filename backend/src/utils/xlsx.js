@@ -28,6 +28,29 @@ function columnName(index) {
   return result;
 }
 
+function dimensionRef(rowCount, columnCount) {
+  return `A1:${columnName(Math.max(0, columnCount - 1))}${Math.max(1, rowCount)}`;
+}
+
+function columnDefinitions(columnCount, imageColumnIndex) {
+  const columns = [];
+  for (let index = 0; index < columnCount; index += 1) {
+    const column = index + 1;
+    const width = index === imageColumnIndex ? 18 : 24;
+    columns.push(`<col min="${column}" max="${column}" width="${width}" customWidth="1"/>`);
+  }
+  return `<cols>${columns.join('')}</cols>`;
+}
+
+function sheetRow(row, rowIndex, imageColumnIndex) {
+  const height = rowIndex > 0 && imageColumnIndex >= 0 ? ' ht="92" customHeight="1"' : '';
+  const cells = row.map((value, columnIndex) => {
+    const reference = `${columnName(columnIndex)}${rowIndex + 1}`;
+    return `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  }).join('');
+  return `<row r="${rowIndex + 1}"${height}>${cells}</row>`;
+}
+
 export function createSimpleXlsx(rows, sheetName = 'Students') {
   const worksheetRows = rows.map((row, rowIndex) => {
     const cells = row.map((value, columnIndex) => {
@@ -45,6 +68,36 @@ export function createSimpleXlsx(rows, sheetName = 'Students') {
     'xl/styles.xml': strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="1"><xf xfId="0"/></cellXfs></styleSheet>'),
     'xl/worksheets/sheet1.xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${worksheetRows}</sheetData></worksheet>`),
   };
+  return Buffer.from(zipSync(files, { level: 6 }));
+}
+
+export function createXlsxWithImages(rows, imagesByRow, sheetName = 'Students') {
+  const imageColumnIndex = rows[0]?.length ? rows[0].length - 1 : -1;
+  const worksheetRows = rows.map((row, rowIndex) => sheetRow(row, rowIndex, imageColumnIndex)).join('');
+  const imageEntries = Array.from(imagesByRow.entries()).sort(([left], [right]) => left - right);
+  const hasImages = imageEntries.length > 0;
+  const drawingRelationships = imageEntries.map(([_rowIndex, image], index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${escapeXml(image.name)}"/>`).join('');
+  const anchors = imageEntries.map(([rowIndex, _image], index) => {
+    const row = rowIndex;
+    const column = imageColumnIndex;
+    return `<xdr:oneCellAnchor><xdr:from><xdr:col>${column}</xdr:col><xdr:colOff>95250</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>95250</xdr:rowOff></xdr:from><xdr:ext cx="857250" cy="857250"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${index + 1}" name="QR ${index + 1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${index + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+  }).join('');
+  const files = {
+    '[Content_Types].xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${hasImages ? '<Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''}<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`),
+    '_rels/.rels': strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    'xl/workbook.xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`),
+    'xl/_rels/workbook.xml.rels': strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    'xl/styles.xml': strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="1"><xf xfId="0"/></cellXfs></styleSheet>'),
+    'xl/worksheets/sheet1.xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="${dimensionRef(rows.length, rows[0]?.length || 1)}"/>${columnDefinitions(rows[0]?.length || 1, imageColumnIndex)}<sheetData>${worksheetRows}</sheetData>${hasImages ? '<drawing r:id="rId1"/>' : ''}</worksheet>`),
+  };
+  if (hasImages) {
+    files['xl/worksheets/_rels/sheet1.xml.rels'] = strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>');
+    files['xl/drawings/drawing1.xml'] = strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`);
+    files['xl/drawings/_rels/drawing1.xml.rels'] = strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${drawingRelationships}</Relationships>`);
+    imageEntries.forEach(([_rowIndex, image]) => {
+      files[`xl/media/${image.name}`] = new Uint8Array(image.buffer);
+    });
+  }
   return Buffer.from(zipSync(files, { level: 6 }));
 }
 
