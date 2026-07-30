@@ -13,7 +13,10 @@ function publicStudent(student) {
     studentId: student.studentId,
     email: student.email,
     group: group ? { name: group.name, code: group.code, whatsappLink: group.whatsappLink } : null,
-    coordinator: student.groupCoordinatorId ? { name: student.groupCoordinatorId.name, mobile: student.groupCoordinatorId.mobile } : null,
+    coordinator: student.groupCoordinatorName || student.groupCoordinatorId ? {
+      name: student.groupCoordinatorName || student.groupCoordinatorId?.name,
+      mobile: student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile,
+    } : null,
     registrationStatus: student.registrationStatus,
     scanCount: student.scanCount,
   };
@@ -21,7 +24,7 @@ function publicStudent(student) {
 
 async function populatedStudent(id) {
   return Student.findById(id)
-    .select('name studentId email groupIds groupCoordinatorId registrationStatus scanCount isActive')
+    .select('name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus scanCount isActive')
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile')
     .lean();

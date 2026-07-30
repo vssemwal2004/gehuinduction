@@ -41,7 +41,7 @@ async function contentFor(job) {
   const group = student.groupIds?.[0];
   return {
     subject: 'GEU Induction Programme 2026 — Registration details',
-    html: `<p>Hello ${escapeHtml(student.name)},</p><p>Your induction registration has been confirmed.</p><p><strong>Group:</strong> ${escapeHtml(group?.name || group?.code || 'Not assigned')}<br><strong>Group coordinator:</strong> ${escapeHtml(student.groupCoordinatorId?.name || 'Not assigned')}<br><strong>Coordinator contact:</strong> ${escapeHtml(student.groupCoordinatorId?.mobile || 'Not available')}</p>${group?.whatsappLink ? `<p><a href="${escapeHtml(group.whatsappLink)}">Join your WhatsApp group</a></p>` : ''}<p>Regards,<br>GEU Induction Programme 2026</p>`,
+    html: `<p>Hello ${escapeHtml(student.name)},</p><p>Your induction registration has been confirmed.</p><p><strong>Group:</strong> ${escapeHtml(group?.name || group?.code || 'Not assigned')}<br><strong>Group coordinator:</strong> ${escapeHtml(student.groupCoordinatorName || student.groupCoordinatorId?.name || 'Not assigned')}<br><strong>Coordinator contact:</strong> ${escapeHtml(student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || 'Not available')}</p>${group?.whatsappLink ? `<p><a href="${escapeHtml(group.whatsappLink)}">Join your WhatsApp group</a></p>` : ''}<p>Regards,<br>GEU Induction Programme 2026</p>`,
   };
 }
 

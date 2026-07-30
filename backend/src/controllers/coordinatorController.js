@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import { parse } from 'csv-parse/sync';
-import Group from '../models/Group.js';
 import MailJob from '../models/MailJob.js';
 import User from '../models/User.js';
 import { encryptCredentialPayload, generateTemporaryPassword } from '../services/credentialService.js';
@@ -25,7 +24,7 @@ async function queueCredentials(user, password, session, activatePasswordHash) {
   else await MailJob.create(document);
 }
 
-const importHeaders = ['coordinator name', 'email', 'mobile number', 'coordinator type'];
+const importHeaders = ['scan coordinator name', 'email', 'mobile number'];
 function importRows(file) {
   if (!file) throw new HttpError(400, 'Select a coordinator import file');
   const rows = file.originalname.toLowerCase().endsWith('.csv')
@@ -37,7 +36,7 @@ function importRows(file) {
   if (importHeaders.some((header, index) => headers[index] !== header)) throw new HttpError(400, 'Use the provided coordinator template');
   return rows.slice(1).map((row, index) => ({
     row: index + 2, name: String(row[0] || '').trim(), email: String(row[1] || '').trim().toLowerCase(),
-    mobile: String(row[2] || '').trim(), role: String(row[3] || '').trim().toLowerCase(),
+    mobile: String(row[2] || '').trim(),
   }));
 }
 
@@ -59,7 +58,7 @@ async function validateImport(file) {
 export function downloadCoordinatorTemplate(_req, res) {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="geu-coordinator-import-template.xlsx"');
-  res.send(createSimpleXlsx([importHeaders.map((item) => item.replace(/\b\w/g, (letter) => letter.toUpperCase())), ['Example Name', 'coordinator@example.com', '+91 9999999999', 'scan_coordinator']], 'Coordinators'));
+  res.send(createSimpleXlsx([importHeaders.map((item) => item.replace(/\b\w/g, (letter) => letter.toUpperCase())), ['Example Name', 'coordinator@example.com', '+91 9999999999']], 'Scan Coordinators'));
 }
 
 export async function previewCoordinatorImport(req, res) {
@@ -74,7 +73,7 @@ export async function commitCoordinatorImport(req, res) {
     await session.withTransaction(async () => {
       for (const row of result.rows) {
         const password = generateTemporaryPassword();
-        const [user] = await User.create([{ name: row.name, email: row.email, mobile: row.mobile, role: row.role, passwordHash: await User.hashPassword(password) }], { session });
+        const [user] = await User.create([{ name: row.name, email: row.email, mobile: row.mobile, role: 'scan_coordinator', passwordHash: await User.hashPassword(password) }], { session });
         await queueCredentials(user, password, session);
       }
     });
@@ -87,8 +86,7 @@ export async function commitCoordinatorImport(req, res) {
 }
 
 export async function listCoordinators(req, res) {
-  const query = { role: { $in: ['group_coordinator', 'scan_coordinator'] } };
-  if (req.query.role) query.role = req.query.role;
+  const query = { role: 'scan_coordinator' };
   if (req.query.status === 'active') query.isActive = true;
   if (req.query.status === 'inactive') query.isActive = false;
   if (req.query.search) {
@@ -99,9 +97,7 @@ export async function listCoordinators(req, res) {
     .select('name email mobile role isActive lastLoginAt createdAt')
     .sort({ isActive: -1, name: 1 })
     .lean();
-  const groupCounts = await Group.aggregate([{ $match: { coordinatorId: { $ne: null } } }, { $group: { _id: '$coordinatorId', count: { $sum: 1 } } }]);
-  const countMap = new Map(groupCounts.map((item) => [String(item._id), item.count]));
-  res.json({ coordinators: coordinators.map((item) => ({ ...item, assignedGroups: countMap.get(String(item._id)) || 0 })) });
+  res.json({ coordinators });
 }
 
 export async function createCoordinator(req, res) {
@@ -110,7 +106,7 @@ export async function createCoordinator(req, res) {
   const email = parsed.data.email.toLowerCase();
   if (await User.exists({ email })) throw new HttpError(409, 'Email is already registered');
   const password = generateTemporaryPassword();
-  const user = await User.create({ ...parsed.data, email, passwordHash: await User.hashPassword(password) });
+  const user = await User.create({ ...parsed.data, email, role: 'scan_coordinator', passwordHash: await User.hashPassword(password) });
   await queueCredentials(user, password);
   res.status(201).json({ coordinator: user, credentialMailQueued: true });
 }
@@ -119,12 +115,9 @@ export async function updateCoordinator(req, res) {
   validId(req.params.coordinatorId);
   const parsed = coordinatorInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid coordinator details');
-  const current = await User.findOne({ _id: req.params.coordinatorId, role: { $in: ['group_coordinator', 'scan_coordinator'] } });
+  const current = await User.findOne({ _id: req.params.coordinatorId, role: 'scan_coordinator' });
   if (!current) throw new HttpError(404, 'Coordinator not found');
   if (await User.exists({ email: parsed.data.email.toLowerCase(), _id: { $ne: current._id } })) throw new HttpError(409, 'Email is already registered');
-  if (current.role === 'group_coordinator' && parsed.data.role !== current.role && await Group.exists({ coordinatorId: current._id })) {
-    throw new HttpError(409, 'Remove this coordinator from assigned groups before changing the role');
-  }
   Object.assign(current, parsed.data, { email: parsed.data.email.toLowerCase() });
   await current.save();
   res.json({ coordinator: current });
@@ -134,11 +127,8 @@ export async function setCoordinatorActive(req, res) {
   validId(req.params.coordinatorId);
   const active = req.body?.isActive;
   if (typeof active !== 'boolean') throw new HttpError(400, 'isActive must be true or false');
-  const user = await User.findOne({ _id: req.params.coordinatorId, role: { $in: ['group_coordinator', 'scan_coordinator'] } });
+  const user = await User.findOne({ _id: req.params.coordinatorId, role: 'scan_coordinator' });
   if (!user) throw new HttpError(404, 'Coordinator not found');
-  if (!active && user.role === 'group_coordinator' && await Group.exists({ coordinatorId: user._id, isActive: true })) {
-    throw new HttpError(409, 'Reassign active groups before deactivating this coordinator');
-  }
   user.isActive = active;
   await user.save();
   res.json({ coordinator: user });
@@ -146,7 +136,7 @@ export async function setCoordinatorActive(req, res) {
 
 export async function resendCoordinatorCredentials(req, res) {
   validId(req.params.coordinatorId);
-  const user = await User.findOne({ _id: req.params.coordinatorId, role: { $in: ['group_coordinator', 'scan_coordinator'] }, isActive: true });
+  const user = await User.findOne({ _id: req.params.coordinatorId, role: 'scan_coordinator', isActive: true });
   if (!user) throw new HttpError(404, 'Active coordinator not found');
   const password = generateTemporaryPassword();
   const pendingHash = await User.hashPassword(password);

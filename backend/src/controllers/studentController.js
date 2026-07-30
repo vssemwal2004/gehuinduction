@@ -12,11 +12,10 @@ function escapeRegex(value) {
 async function resolveGroups(groupIds) {
   const ids = [...new Set(groupIds)];
   const groups = await Group.find({ _id: { $in: ids }, isActive: true })
-    .select('_id coordinatorId name code')
+    .select('_id name code')
     .lean();
   if (groups.length !== ids.length) throw new HttpError(400, 'One or more selected groups are unavailable');
-  const primaryGroup = groups.find((group) => String(group._id) === String(ids[0]));
-  return { ids, primaryGroup };
+  return { ids };
 }
 
 function duplicateMessage(error) {
@@ -45,7 +44,7 @@ export async function listStudents(req, res) {
     Student.find(query)
       .populate('groupIds', 'name code whatsappLink')
       .populate('groupCoordinatorId', 'name mobile email')
-      .select('name studentId email groupIds groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt')
+      .select('name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt')
       .sort({ createdAt: -1, _id: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -54,7 +53,13 @@ export async function listStudents(req, res) {
   ]);
 
   res.json({
-    students,
+    students: students.map((student) => ({
+      ...student,
+      groupCoordinatorId: student.groupCoordinatorId || (student.groupCoordinatorName ? {
+        name: student.groupCoordinatorName,
+        mobile: student.groupCoordinatorMobile,
+      } : null),
+    })),
     pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
   });
 }
@@ -73,7 +78,7 @@ export async function getStudent(req, res) {
 export async function createStudent(req, res) {
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const { ids, primaryGroup } = await resolveGroups(parsed.data.groupIds);
+  const { ids } = await resolveGroups(parsed.data.groupIds);
   const qr = createQrToken();
   try {
     const student = await Student.create({
@@ -81,7 +86,8 @@ export async function createStudent(req, res) {
       studentId: parsed.data.studentId,
       email: parsed.data.email.toLowerCase(),
       groupIds: ids,
-      groupCoordinatorId: primaryGroup?.coordinatorId || null,
+      groupCoordinatorName: parsed.data.groupCoordinatorName,
+      groupCoordinatorMobile: parsed.data.groupCoordinatorMobile,
       qrTokenHash: qr.tokenHash,
       qrTokenEncrypted: qr.tokenEncrypted,
     });
@@ -96,14 +102,15 @@ export async function updateStudent(req, res) {
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const { ids, primaryGroup } = await resolveGroups(parsed.data.groupIds);
+  const { ids } = await resolveGroups(parsed.data.groupIds);
   try {
     const student = await Student.findByIdAndUpdate(req.params.studentId, {
       name: parsed.data.name,
       studentId: parsed.data.studentId,
       email: parsed.data.email.toLowerCase(),
       groupIds: ids,
-      groupCoordinatorId: primaryGroup?.coordinatorId || null,
+      groupCoordinatorName: parsed.data.groupCoordinatorName,
+      groupCoordinatorMobile: parsed.data.groupCoordinatorMobile,
     }, { new: true, runValidators: true }).populate('groupIds', 'name code');
     if (!student) throw new HttpError(404, 'Student not found');
     res.json({ student });

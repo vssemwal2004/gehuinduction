@@ -23,7 +23,7 @@ export async function getAdminDashboard(req, res) {
     Student.countDocuments({ isActive: true, registrationStatus: 'registered' }),
     Student.countDocuments({ isActive: true, registrationStatus: 'not_registered' }),
     Group.countDocuments({ isActive: true }),
-    User.countDocuments({ role: 'group_coordinator', isActive: true }),
+    Student.distinct('groupCoordinatorMobile', { isActive: true, groupCoordinatorMobile: { $nin: [null, ''] } }).then((items) => items.length),
     User.countDocuments({ role: 'scan_coordinator', isActive: true }),
     ScanEvent.countDocuments({ createdAt: { $gte: startOfToday } }),
     MailJob.countDocuments({ status: 'sent' }),

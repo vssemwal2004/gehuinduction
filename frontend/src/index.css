@@ -1,4 +1,69 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@layer base { html { font-family: Inter, ui-sans-serif, system-ui, sans-serif; } body { @apply m-0 bg-slate-50 text-slate-900 antialiased; } button, input, select { font: inherit; } :where(button, a, input, select):focus-visible { @apply outline-2 outline-offset-2 outline-blue-600; } }
+@layer base {
+  html { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  body { @apply m-0 min-w-0 overflow-x-hidden bg-slate-50 text-slate-900 antialiased; }
+  button, input, select { font: inherit; }
+  button, select { touch-action: manipulation; }
+  :where(button, a, input, select):focus-visible { @apply outline-2 outline-offset-2 outline-blue-600; }
+}
+
+@layer utilities {
+  .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .table-scroll { scrollbar-width: thin; overscroll-behavior-inline: contain; }
+}
+
+.scan-coordinators-page table {
+  min-width: 650px;
+}
+
+.scan-coordinators-page table :is(th, td):nth-child(2),
+.scan-coordinators-page table :is(th, td):nth-child(4),
+.groups-page table :is(th, td):nth-child(4) {
+  display: none;
+}
+
+.groups-page table {
+  min-width: 640px;
+}
+
+@media (max-width: 639px) {
+  [role="dialog"].fixed.inset-0 {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  [role="dialog"].fixed.inset-0 > :is(form, div) {
+    max-height: 100dvh;
+    overflow-y: auto;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .overflow-x-auto {
+    scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    font-size: 0.8125rem;
+  }
+
+  .items-end.justify-between {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flex.gap-2 {
+    flex-wrap: wrap;
+  }
+
+  [class*="grid-cols-[120px_1fr]"],
+  [class*="grid-cols-[125px_1fr]"],
+  [class*="grid-cols-[130px_1fr]"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+}

@@ -9,8 +9,8 @@ import { createSimpleXlsx } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
 
 const TEMPLATE_ROWS = [
-  ['Student Name', 'Student ID', 'Email', 'Group Code'],
-  ['Example Student', 'GEU2026001', 'student@example.com', 'G1'],
+  ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
+  ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
 ];
 
 function safeFileName(value) {
@@ -59,7 +59,8 @@ export async function commitStudentImport(req, res) {
       studentId: row.studentId,
       email: row.email,
       groupIds: [row.groupId],
-      groupCoordinatorId: row.coordinatorId,
+      groupCoordinatorName: row.groupCoordinatorName,
+      groupCoordinatorMobile: row.groupCoordinatorMobile,
       qrTokenHash: qr.tokenHash,
       qrTokenEncrypted: qr.tokenEncrypted,
     };
@@ -94,14 +95,14 @@ export async function listImportHistory(_req, res) {
 export async function exportStudentsExcel(_req, res) {
   const students = await Student.find().populate('groupIds', 'name code').populate('groupCoordinatorId', 'name mobile').sort({ studentId: 1 }).lean();
   const rows = [
-    ['Student Name', 'Student ID', 'Email', 'Groups', 'Coordinator', 'Coordinator Mobile', 'Registration Status', 'QR File Name'],
+    ['Student Name', 'Student ID', 'Email', 'Groups', 'Group Coordinator', 'Group Coordinator Mobile', 'Registration Status', 'QR File Name'],
     ...students.map((student) => [
       student.name,
       student.studentId,
       student.email,
       student.groupIds.map((group) => group.code).join(', '),
-      student.groupCoordinatorId?.name || '',
-      student.groupCoordinatorId?.mobile || '',
+      student.groupCoordinatorName || student.groupCoordinatorId?.name || '',
+      student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || '',
       student.registrationStatus,
       `${safeFileName(student.studentId)}_${safeFileName(student.name)}.png`,
     ]),

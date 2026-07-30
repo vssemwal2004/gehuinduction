@@ -15,6 +15,5 @@ export const groupInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
   code: z.string().trim().min(1).max(30).regex(/^[A-Za-z0-9_-]+$/, 'Use letters, numbers, hyphens or underscores only'),
   whatsappLink: whatsappLinkSchema,
-  coordinatorId: z.string().trim().regex(/^[0-9a-fA-F]{24}$/).nullable().optional(),
   isActive: z.boolean().optional(),
 });

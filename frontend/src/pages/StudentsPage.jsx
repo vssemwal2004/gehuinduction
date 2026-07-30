@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, Search, Upload, UserRoundCheck, UserRoundX, X } from 'lucide-react';
 import { api, downloadApiFile } from '../lib/api';
 
-const emptyForm = { name: '', studentId: '', email: '', groupIds: [] };
+const emptyForm = { name: '', studentId: '', email: '', groupIds: [], groupCoordinatorName: '', groupCoordinatorMobile: '' };
 
 function StudentForm({ groups, initialValue, onClose, onSaved }) {
   const [form, setForm] = useState(initialValue || emptyForm);
@@ -27,15 +27,17 @@ function StudentForm({ groups, initialValue, onClose, onSaved }) {
     }
   }
 
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4" role="dialog" aria-modal="true" aria-labelledby="student-form-title">
-    <form onSubmit={submit} className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl">
+  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="student-form-title">
+    <form onSubmit={submit} className="max-h-[100dvh] w-full max-w-lg overflow-y-auto rounded-t-xl border border-slate-200 bg-white shadow-xl sm:max-h-[90vh] sm:rounded-xl">
       <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="student-form-title" className="text-base font-semibold">{initialValue ? 'Edit student' : 'Add student'}</h2><p className="mt-1 text-xs text-slate-500">QR mapping is generated securely when a student is added.</p></div><button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Close"><X size={17}/></button></div>
       <div className="grid gap-4 p-5 sm:grid-cols-2">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:col-span-2">{error}</div> : null}
         <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student name</span><input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="Full name"/></label>
         <label className="block"><span className="text-xs font-medium text-slate-700">Student ID</span><input required maxLength={60} value={form.studentId} onChange={(e) => setForm({ ...form, studentId: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="GEU2026001"/></label>
         <label className="block"><span className="text-xs font-medium text-slate-700">Email</span><input required type="email" maxLength={180} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="student@example.com"/></label>
-        <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Group</span><select required value={form.groupIds[0] || ''} onChange={(e) => setForm({ ...form, groupIds: e.target.value ? [e.target.value] : [] })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500"><option value="">Select group</option>{groups.filter((group) => group.isActive).map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select><span className="mt-1.5 block text-[11px] text-slate-500">The group coordinator and WhatsApp link come from the selected group.</span></label>
+        <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student group</span><select required value={form.groupIds[0] || ''} onChange={(e) => setForm({ ...form, groupIds: e.target.value ? [e.target.value] : [] })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500"><option value="">Select group</option>{groups.filter((group) => group.isActive).map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select><span className="mt-1.5 block text-[11px] text-slate-500">The WhatsApp link comes from this group. Assign the student’s group coordinator below.</span></label>
+        <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator name</span><input required maxLength={120} value={form.groupCoordinatorName || ''} onChange={(e) => setForm({ ...form, groupCoordinatorName: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="Coordinator name"/></label>
+        <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator mobile</span><input required maxLength={30} value={form.groupCoordinatorMobile || ''} onChange={(e) => setForm({ ...form, groupCoordinatorMobile: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="+91 9999999999"/></label>
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4"><button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button><button disabled={saving} className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving…' : 'Save student'}</button></div>
     </form>
@@ -47,8 +49,8 @@ function StudentDetails({ student, onClose }) {
     ['Student ID', student.studentId],
     ['Email', student.email],
     ['Group', student.groupIds?.map((group) => group.name).join(', ') || 'Not assigned'],
-    ['Group coordinator', student.groupCoordinatorId?.name || 'Not assigned'],
-    ['Coordinator mobile', student.groupCoordinatorId?.mobile || 'Not available'],
+    ['Group coordinator', student.groupCoordinatorName || student.groupCoordinatorId?.name || 'Not assigned'],
+    ['Coordinator mobile', student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || 'Not available'],
     ['Registration', student.registrationStatus?.replace('_', ' ')],
     ['Scan count', student.scanCount || 0],
     ['Last scanned', student.lastScannedAt ? new Date(student.lastScannedAt).toLocaleString() : 'Never'],

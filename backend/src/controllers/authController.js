@@ -23,7 +23,7 @@ export async function login(req, res) {
   if (!parsed.success) throw new HttpError(400, 'Enter a valid email and password');
 
   const user = await User.findOne({ email: parsed.data.email.toLowerCase() }).select('+passwordHash');
-  if (!user || !user.isActive || !(await user.verifyPassword(parsed.data.password))) {
+  if (!user || !['admin', 'scan_coordinator'].includes(user.role) || !user.isActive || !(await user.verifyPassword(parsed.data.password))) {
     throw new HttpError(401, 'Invalid email or password');
   }
 

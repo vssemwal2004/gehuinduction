@@ -3,7 +3,7 @@ import Group from '../models/Group.js';
 import Student from '../models/Student.js';
 import { parseSimpleXlsx } from '../utils/xlsx.js';
 
-const HEADERS = ['student name', 'student id', 'email', 'group code'];
+const HEADERS = ['student name', 'student id', 'email', 'group code', 'group coordinator name', 'group coordinator mobile'];
 
 function normalize(value) {
   return String(value ?? '').trim();
@@ -35,11 +35,13 @@ export async function validateStudentImport(file) {
     studentId: normalize(row[1]),
     email: normalize(row[2]).toLowerCase(),
     groupCode: normalize(row[3]).toUpperCase(),
+    groupCoordinatorName: normalize(row[4]),
+    groupCoordinatorMobile: normalize(row[5]),
   }));
 
   const groupCodes = [...new Set(dataRows.map((row) => row.groupCode).filter(Boolean))];
   const [groups, existing] = await Promise.all([
-    Group.find({ code: { $in: groupCodes }, isActive: true }).select('_id code coordinatorId').lean(),
+    Group.find({ code: { $in: groupCodes }, isActive: true }).select('_id code').lean(),
     Student.find({
       $or: [
         { studentId: { $in: dataRows.map((row) => row.studentId).filter(Boolean) } },
@@ -60,6 +62,8 @@ export async function validateStudentImport(file) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push('Email is invalid');
     if (!row.groupCode) errors.push('Group code is required');
     else if (!groupMap.has(row.groupCode)) errors.push(`Group ${row.groupCode} does not exist or is inactive`);
+    if (row.groupCoordinatorName.length < 2) errors.push('Group coordinator name is required');
+    if (!/^[+0-9 ()-]{7,30}$/.test(row.groupCoordinatorMobile)) errors.push('Group coordinator mobile is invalid');
     if (existingIds.has(row.studentId)) errors.push('Student ID already exists');
     if (existingEmails.has(row.email)) errors.push('Email already exists');
     if (fileIds.has(row.studentId)) errors.push('Duplicate student ID in file');
@@ -70,7 +74,6 @@ export async function validateStudentImport(file) {
     return {
       ...row,
       groupId: group?._id || null,
-      coordinatorId: group?.coordinatorId || null,
       valid: errors.length === 0,
       errors,
     };

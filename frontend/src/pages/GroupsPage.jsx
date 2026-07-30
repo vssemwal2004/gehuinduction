@@ -88,11 +88,11 @@ export default function GroupsPage() {
   }
 
   function openEdit(group) {
-    setEditing({ ...group, coordinatorId: group.coordinatorId?._id || null });
+    setEditing(group);
     setFormOpen(true);
   }
 
-  return <div className="space-y-4">
+  return <div className="groups-page space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold">Groups & WhatsApp</h1><p className="mt-1 text-xs text-slate-500">Configure student groups and their official WhatsApp links.</p></div><button onClick={openCreate} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16}/>Add group</button></div>
     {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
