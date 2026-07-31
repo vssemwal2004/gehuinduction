@@ -13,6 +13,7 @@ const TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
   ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
 ];
+const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
 function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
@@ -49,8 +50,8 @@ function groupCodes(student) {
     : '';
 }
 
-function publicQrUrl(req, tokenHash) {
-  return `${req.protocol}://${req.get('host')}/api/public/qr/${tokenHash}`;
+function publicQrUrl(studentId) {
+  return `${QR_LINK_BASE}${encodeURIComponent(String(studentId).trim())}`;
 }
 
 export function downloadStudentTemplate(_req, res) {
@@ -168,7 +169,7 @@ export async function exportStudentsExcel(req, res) {
     let qrLink = 'Inactive';
     if (canExportQr) {
       const qr = await ensureQrData(student);
-      qrLink = publicQrUrl(req, qr.tokenHash);
+      qrLink = publicQrUrl(student.studentId);
       const rowIndex = rows.length;
       imagesByRow.set(rowIndex, { name: `${qr.tokenHash}.png`, buffer: createStudentQrImage(qr.token) });
     }
@@ -215,11 +216,11 @@ export async function downloadQrPackage(req, res) {
       const qr = await ensureQrData(student);
       const fileName = `${safeFileName(student.studentId)}.svg`;
       const image = await createStudentQrTemplateSvg(qr.token);
-      return { student, fileName, image, tokenHash: qr.tokenHash };
+      return { student, fileName, image };
     }));
-    generated.forEach(({ student, fileName, image, tokenHash }) => {
+    generated.forEach(({ student, fileName, image }) => {
       files[`qr-codes/${fileName}`] = strToU8(image);
-      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(req, tokenHash), fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(student.studentId), fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
