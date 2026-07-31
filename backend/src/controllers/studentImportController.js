@@ -4,10 +4,11 @@ import { zipSync, strToU8 } from 'fflate';
 import ImportJob from '../models/ImportJob.js';
 import Student from '../models/Student.js';
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
-import { createStudentQrCard } from '../services/qrCardService.js';
+import { createStudentQrCard, createStudentQrTemplateSvg } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
-import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
+import { createSimpleXlsx } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
+import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
 const TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
@@ -35,15 +36,12 @@ async function ensureQrData(student) {
   return { token: qr.token, tokenHash: qr.tokenHash };
 }
 
-function groupFilterFromRequest(req) {
-  const groupId = String(req.query.groupId || '').trim();
-  if (!groupId) return {};
-  if (!mongoose.isValidObjectId(groupId)) throw new HttpError(400, 'Invalid group ID');
-  return { groupIds: groupId };
-}
-
 function filteredExportName(prefix, req) {
   const groupId = String(req.query.groupId || '').trim();
+  const addedDate = String(req.query.addedDate || '').trim();
+  const importId = String(req.query.importId || '').trim();
+  if (importId) return `${prefix}-batch-${safeFileName(importId)}`;
+  if (addedDate) return `${prefix}-${safeFileName(addedDate)}`;
   return groupId ? `${prefix}-group-${safeFileName(groupId)}` : prefix;
 }
 
@@ -106,7 +104,6 @@ export async function commitStudentImport(req, res) {
   let job;
   try {
     await session.withTransaction(async () => {
-      await Student.insertMany(documents, { ordered: true, session });
       [job] = await ImportJob.create([{
         fileName: req.file.originalname,
         requestedBy: req.user._id,
@@ -114,6 +111,7 @@ export async function commitStudentImport(req, res) {
         totalRows: result.total,
         importedRows: result.total,
       }], { session });
+      await Student.insertMany(documents.map((document) => ({ ...document, importJobId: job._id })), { ordered: true, session });
     });
   } catch (error) {
     throw new HttpError(error?.code === 11000 ? 409 : 500, error?.code === 11000 ? 'A student was added by another request. Preview the file again.' : 'Student import failed');
@@ -124,12 +122,17 @@ export async function commitStudentImport(req, res) {
 }
 
 export async function listImportHistory(_req, res) {
-  const jobs = await ImportJob.find().populate('requestedBy', 'name email').sort({ createdAt: -1 }).limit(50).lean();
-  res.json({ imports: jobs });
+  const jobs = await ImportJob.find({ status: 'completed' }).populate('requestedBy', 'name email').sort({ createdAt: -1 }).limit(100).lean();
+  const linkedCounts = await Student.aggregate([
+    { $match: { importJobId: { $in: jobs.map((job) => job._id) } } },
+    { $group: { _id: '$importJobId', count: { $sum: 1 } } },
+  ]);
+  const counts = new Map(linkedCounts.map((item) => [String(item._id), item.count]));
+  res.json({ imports: jobs.map((job) => ({ ...job, linkedStudents: counts.get(String(job._id)) || 0 })) });
 }
 
 export async function exportStudentsExcel(req, res) {
-  const students = await Student.find(groupFilterFromRequest(req))
+  const students = await Student.find(studentFilterFromRequest(req))
     .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile email')
@@ -154,20 +157,14 @@ export async function exportStudentsExcel(req, res) {
       'Created At',
       'Updated At',
       'QR Link',
-      'QR Image',
     ],
   ];
-  const imagesByRow = new Map();
   for (const student of students) {
     const canExportQr = student.isActive && !student.qrRevokedAt;
     let qrLink = 'Inactive';
     if (canExportQr) {
       const qr = await ensureQrData(student);
-      const fileName = `${qr.tokenHash}.png`;
       qrLink = `${QR_LINK_BASE}${qr.tokenHash}`;
-      const rowIndex = rows.length;
-      const image = await createStudentQrCard(qr.token);
-      imagesByRow.set(rowIndex, { name: fileName, buffer: image });
     }
     rows.push([
       student.name,
@@ -185,18 +182,17 @@ export async function exportStudentsExcel(req, res) {
       student.createdAt ? new Date(student.createdAt).toISOString() : '',
       student.updatedAt ? new Date(student.updatedAt).toISOString() : '',
       qrLink,
-      canExportQr ? 'QR image' : 'Inactive',
     ]);
   }
 
-  const workbook = createXlsxWithImages(rows, imagesByRow, 'Students');
+  const workbook = createSimpleXlsx(rows, 'Students');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-students', req)}.xlsx"`);
   res.send(workbook);
 }
 
 export async function downloadQrPackage(req, res) {
-  const students = await Student.find({ ...groupFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
+  const students = await Student.find({ ...studentFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
     .select('+qrTokenEncrypted +qrTokenHash name studentId email registrationStatus')
     .populate('groupIds', 'name code')
     .sort({ studentId: 1 })
@@ -210,17 +206,17 @@ export async function downloadQrPackage(req, res) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
       const qr = await ensureQrData(student);
-      const fileName = `${qr.tokenHash}.png`;
-      const image = await createStudentQrCard(qr.token);
+      const fileName = `${safeFileName(student.studentId)}.svg`;
+      const image = await createStudentQrTemplateSvg(qr.token);
       return { student, fileName, image };
     }));
     generated.forEach(({ student, fileName, image }) => {
-      files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), `${QR_LINK_BASE}${fileName.replace(/\.png$/, '')}`, fileName]);
+      files[`qr-codes/${fileName}`] = strToU8(image);
+      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), `${QR_LINK_BASE}${fileName.replace(/\.(?:png|svg)$/, '')}`, fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
-  files['README.txt'] = strToU8('GEU Induction Programme 2026\nQR images contain secure opaque tokens only. Student data is resolved by the authenticated scan coordinator application.');
+  files['README.txt'] = strToU8('GEU Induction Programme 2026\nEach student-ID-named SVG is a self-contained card with the compressed poster template and a sharply aligned vector QR. No external asset folder is required. SVG cards open in modern browsers and print at any size without losing QR quality. QR images contain secure opaque tokens only; student data is resolved by the authenticated scan coordinator application.');
   const archive = Buffer.from(zipSync(files, { level: 6 }));
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-qr-package', req)}-${Date.now()}.zip"`);

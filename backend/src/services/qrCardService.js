@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { PNG } from 'pngjs';
 import QRCode from 'qrcode';
+import jpeg from 'jpeg-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.resolve(__dirname, '../../../frontend/src/img/123.png');
@@ -11,9 +12,16 @@ const templatePath = path.resolve(__dirname, '../../../frontend/src/img/123.png'
 const qrBox = { x: 257, y: 550, size: 510 };
 
 let cachedTemplate;
+let cachedTemplateSource;
+let cachedCompactTemplateDataUri;
+
+export function getQrCardTemplate() {
+  if (!cachedTemplateSource) cachedTemplateSource = fs.readFileSync(templatePath);
+  return cachedTemplateSource;
+}
 
 function template() {
-  if (!cachedTemplate) cachedTemplate = PNG.sync.read(fs.readFileSync(templatePath));
+  if (!cachedTemplate) cachedTemplate = PNG.sync.read(getQrCardTemplate());
   const image = new PNG({ width: cachedTemplate.width, height: cachedTemplate.height });
   cachedTemplate.data.copy(image.data);
   return image;
@@ -49,4 +57,44 @@ export async function createStudentQrCard(token) {
   });
   drawImage(PNG.sync.read(qrBuffer), card, qrBox);
   return PNG.sync.write(card);
+}
+
+function compactTemplateDataUri() {
+  if (cachedCompactTemplateDataUri) return cachedCompactTemplateDataUri;
+  const source = template();
+  const width = 512;
+  const height = 768;
+  const data = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const targetIndex = (width * y + x) << 2;
+      const sourceX = x * 2;
+      const sourceY = y * 2;
+      for (let channel = 0; channel < 4; channel += 1) {
+        const topLeft = source.data[((source.width * sourceY + sourceX) << 2) + channel];
+        const topRight = source.data[((source.width * sourceY + sourceX + 1) << 2) + channel];
+        const bottomLeft = source.data[((source.width * (sourceY + 1) + sourceX) << 2) + channel];
+        const bottomRight = source.data[((source.width * (sourceY + 1) + sourceX + 1) << 2) + channel];
+        data[targetIndex + channel] = Math.round((topLeft + topRight + bottomLeft + bottomRight) / 4);
+      }
+    }
+  }
+  const compressed = jpeg.encode({ data, width, height }, 70).data;
+  cachedCompactTemplateDataUri = `data:image/jpeg;base64,${compressed.toString('base64')}`;
+  return cachedCompactTemplateDataUri;
+}
+
+// SVG is compact, resolution-independent and much faster to create than PNG.
+// It keeps a full-cohort ZIP in the MB range without blocking the API process.
+export async function createStudentQrTemplateSvg(token) {
+  const qr = await QRCode.toString(`GEUQR1:${token}`, {
+    type: 'svg',
+    errorCorrectionLevel: 'M',
+    width: qrBox.size,
+    margin: 3,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+  const positionedQr = qr.replace('<svg ', `<svg x="${qrBox.x}" y="${qrBox.y}" `);
+  const background = compactTemplateDataUri();
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 1024 1536" role="img" aria-label="GEU student QR card">\n  <image href="${background}" x="0" y="0" width="1024" height="1536" preserveAspectRatio="none"/>\n  ${positionedQr}\n</svg>`;
 }

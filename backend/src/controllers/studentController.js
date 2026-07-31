@@ -4,10 +4,7 @@ import Student from '../models/Student.js';
 import { createQrToken } from '../services/qrTokenService.js';
 import { studentInputSchema } from '../validators/studentValidator.js';
 import { HttpError } from '../utils/httpError.js';
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
 async function resolveGroups(groupIds) {
   const ids = [...new Set(groupIds)];
@@ -28,17 +25,7 @@ function duplicateMessage(error) {
 export async function listStudents(req, res) {
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(10, Number.parseInt(req.query.limit, 10) || 25));
-  const search = String(req.query.search || '').trim().slice(0, 120);
-  const status = String(req.query.status || '').trim();
-  const groupId = String(req.query.groupId || '').trim();
-  const query = {};
-
-  if (search) {
-    const pattern = new RegExp(escapeRegex(search), 'i');
-    query.$or = [{ name: pattern }, { studentId: pattern }, { email: pattern }];
-  }
-  if (['not_registered', 'registered', 'inactive'].includes(status)) query.registrationStatus = status;
-  if (mongoose.isValidObjectId(groupId)) query.groupIds = groupId;
+  const query = studentFilterFromRequest(req);
 
   const [students, total] = await Promise.all([
     Student.find(query)

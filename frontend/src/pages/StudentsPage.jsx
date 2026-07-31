@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, QrCode, Search, Upload, UserRoundCheck, UserRoundX, X } from 'lucide-react';
+import { CheckCircle2, Download, Eye, FileSpreadsheet, LoaderCircle, MoreVertical, Pencil, Plus, QrCode, Search, Upload, UserRoundCheck, UserRoundX, X } from 'lucide-react';
 import { api, downloadApiFile } from '../lib/api';
 
 const emptyForm = { name: '', studentId: '', email: '', groupIds: [], groupCoordinatorName: '', groupCoordinatorMobile: '' };
@@ -93,7 +93,7 @@ function BulkImportModal({ onClose, onImported }) {
     body.append('file', file);
     try {
       const result = await api('/students/import/commit', { method: 'POST', body });
-      onImported(result.imported);
+      onImported(result);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -117,7 +117,8 @@ export default function StudentsPage() {
   const [students, setStudents] = useState([]);
   const [groups, setGroups] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 25 });
-  const [filters, setFilters] = useState({ search: '', status: '', groupId: '' });
+  const [filters, setFilters] = useState({ search: '', status: '', groupId: '', addedDate: '', importId: '' });
+  const [imports, setImports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -126,6 +127,16 @@ export default function StudentsPage() {
   const [openMenu, setOpenMenu] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [downloading, setDownloading] = useState('');
+
+  async function loadImportHistory() {
+    try {
+      const data = await api('/students/import/history');
+      setImports(data.imports.filter((item) => item.linkedStudents > 0));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
 
   async function load(page = pagination.page) {
     setLoading(true);
@@ -144,11 +155,12 @@ export default function StudentsPage() {
   }
 
   useEffect(() => { api('/groups').then((data) => setGroups(data.groups)).catch((requestError) => setError(requestError.message)); }, []);
+  useEffect(() => { loadImportHistory(); }, []);
   useEffect(() => {
     const timeout = setTimeout(() => load(1), 250);
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.search, filters.status, filters.groupId]);
+  }, [filters.search, filters.status, filters.groupId, filters.addedDate, filters.importId]);
 
   const range = useMemo(() => {
     if (!pagination.total) return '0 students';
@@ -190,35 +202,40 @@ export default function StudentsPage() {
     }
   }
 
-  async function download(path, fileName) {
+  async function download(path, fileName, downloadKey = path) {
     setOpenMenu(null);
     setError('');
+    setDownloading(downloadKey);
     try {
       await downloadApiFile(path, fileName);
     } catch (requestError) {
       setError(requestError.message);
+    } finally {
+      setDownloading('');
     }
   }
 
   function exportPath(path) {
     const params = new URLSearchParams();
-    if (filters.groupId) params.set('groupId', filters.groupId);
+    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
     const query = params.toString();
     return query ? `${path}?${query}` : path;
   }
 
+  const cohortFiltered = Boolean(filters.groupId || filters.addedDate || filters.importId || filters.search || filters.status);
+
   return <div className="space-y-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold">Students</h1><p className="mt-1 text-xs text-slate-500">Manage student records, groups and QR registration status.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => { setBulkOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Bulk import students</button><button onClick={() => download(exportPath('/students/export.xlsx'), 'geu-induction-students.xlsx')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><FileSpreadsheet size={15}/>{filters.groupId ? 'Export selected group data' : 'Export all student data'}</button><button onClick={() => download(exportPath('/students/qr-package.zip'), 'geu-induction-qr-package.zip')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><QrCode size={15}/>{filters.groupId ? 'Bulk download group QR' : 'Bulk download all QR'}</button><button onClick={() => { setEditing(null); setFormOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16}/>Add student</button></div></div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-xl font-semibold">Students</h1><p className="mt-1 text-xs text-slate-500">Manage student records, groups and QR registration status.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => { setBulkOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Bulk import students</button><button disabled={Boolean(downloading)} onClick={() => download(exportPath('/students/export.xlsx'), 'geu-induction-students.xlsx', 'excel')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">{downloading === 'excel' ? <LoaderCircle className="animate-spin" size={15}/> : <FileSpreadsheet size={15}/>} {downloading === 'excel' ? 'Preparing Excel…' : cohortFiltered ? 'Export filtered students' : 'Export all student data'}</button><button disabled={Boolean(downloading)} onClick={() => download(exportPath('/students/qr-package.zip'), 'geu-induction-qr-package.zip', 'qr-bulk')} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">{downloading === 'qr-bulk' ? <LoaderCircle className="animate-spin" size={15}/> : <QrCode size={15}/>} {downloading === 'qr-bulk' ? 'Preparing QR ZIP…' : cohortFiltered ? 'Download filtered QR' : 'Bulk download all QR'}</button><button onClick={() => { setEditing(null); setFormOpen(true); setOpenMenu(null); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16}/>Add student</button></div></div>
     {notice ? <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div> : null}
     {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-[1fr_180px_200px]"><label className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/><input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="h-9 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm" placeholder="Search name, student ID or email"/></label><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All statuses</option><option value="not_registered">Not registered</option><option value="registered">Registered</option><option value="inactive">Inactive</option></select><select value={filters.groupId} onChange={(e) => setFilters({ ...filters, groupId: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All groups</option>{groups.map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select></div>
+      <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-[minmax(260px,1fr)_170px_190px_170px_minmax(260px,1fr)]"><label className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/><input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="h-9 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm" placeholder="Search name, student ID or email"/></label><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All statuses</option><option value="not_registered">Not registered</option><option value="registered">Registered</option><option value="inactive">Inactive</option></select><select value={filters.groupId} onChange={(e) => setFilters({ ...filters, groupId: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All groups</option>{groups.map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select><input type="date" aria-label="Students added on date" title="Filter by added date" value={filters.addedDate} onChange={(e) => setFilters({ ...filters, addedDate: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"/><select aria-label="Import file batch" value={filters.importId} onChange={(e) => setFilters({ ...filters, importId: e.target.value })} className="h-9 rounded-md border border-slate-300 px-3 text-sm"><option value="">All import files</option>{imports.map((item) => <option key={item._id} value={item._id}>{new Date(item.createdAt).toLocaleString()} — {item.fileName} ({item.linkedStudents})</option>)}</select></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left"><thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-semibold">Student</th><th className="px-4 py-3 font-semibold">Student ID</th><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Coordinator</th><th className="px-4 py-3 font-semibold">Status</th><th className="px-4 py-3 font-semibold">Last scan</th><th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">Loading students…</td></tr> : students.length ? students.map((student) => <tr key={student._id} className="text-sm hover:bg-slate-50/70"><td className="px-4 py-3"><div className="font-semibold text-slate-900">{student.name}</div><div className="mt-0.5 text-xs text-slate-500">{student.email}</div></td><td className="px-4 py-3 text-slate-600">{student.studentId}</td><td className="px-4 py-3 text-slate-600">{student.groupIds?.map((group) => group.code).join(', ') || '—'}</td><td className="px-4 py-3"><div className="text-slate-700">{student.groupCoordinatorId?.name || 'Not assigned'}</div><div className="text-xs text-slate-500">{student.groupCoordinatorId?.mobile || ''}</div></td><td className="px-4 py-3"><StatusBadge student={student}/></td><td className="px-4 py-3 text-xs text-slate-600">{student.lastScannedAt ? new Date(student.lastScannedAt).toLocaleString() : 'Never'}</td><td className="px-4 py-3 text-right"><button onClick={(event) => openStudentMenu(student, event)} className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label={`Actions for ${student.name}`} aria-expanded={openMenu?.studentId === student._id}><MoreVertical size={16}/></button></td></tr>) : <tr><td colSpan="7" className="px-4 py-12 text-center text-sm text-slate-500">No students found.</td></tr>}</tbody></table></div>
       <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>{range}</span><div className="flex gap-2"><button disabled={pagination.page <= 1 || loading} onClick={() => load(pagination.page - 1)} className="h-8 rounded-md border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-40">Previous</button><button disabled={pagination.page >= pagination.pages || loading} onClick={() => load(pagination.page + 1)} className="h-8 rounded-md border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-40">Next</button></div></div>
     </div>
     {openMenu && activeMenuStudent ? <><button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Close student actions" onClick={() => setOpenMenu(null)}/><div className="fixed z-50 w-48 rounded-md border border-slate-200 bg-white p-1 text-left text-sm shadow-lg" style={{ left: openMenu.left, top: openMenu.top }}><button onClick={() => { setViewing(activeMenuStudent); setOpenMenu(null); }} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Eye size={14}/>View details</button><button onClick={() => edit(activeMenuStudent)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50"><Pencil size={14}/>Edit student</button><button onClick={() => download(`/students/${activeMenuStudent._id}/qr.png`, `${activeMenuStudent.studentId}-${activeMenuStudent.name}-qr.png`)} disabled={!activeMenuStudent.isActive || activeMenuStudent.registrationStatus === 'inactive'} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"><QrCode size={14}/>Download QR</button><button onClick={() => toggleActive(activeMenuStudent)} className="flex w-full items-center gap-2 rounded px-3 py-2 hover:bg-slate-50">{activeMenuStudent.isActive && activeMenuStudent.registrationStatus !== 'inactive' ? <><UserRoundX size={14}/>Deactivate</> : <><UserRoundCheck size={14}/>Reactivate</>}</button></div></> : null}
     {formOpen ? <StudentForm groups={groups} initialValue={editing} onClose={() => setFormOpen(false)} onSaved={() => { setFormOpen(false); load(1); }}/> : null}
-    {bulkOpen ? <BulkImportModal onClose={() => setBulkOpen(false)} onImported={(count) => { setBulkOpen(false); setNotice(`${count} students imported successfully.`); load(1); }}/> : null}
+    {bulkOpen ? <BulkImportModal onClose={() => setBulkOpen(false)} onImported={(result) => { setBulkOpen(false); setNotice(`${result.imported} students imported successfully.`); loadImportHistory(); setFilters({ ...filters, importId: result.importId, addedDate: '' }); }}/> : null}
     {viewing ? <StudentDetails student={viewing} onClose={() => setViewing(null)}/> : null}
   </div>;
 }
