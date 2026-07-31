@@ -98,3 +98,27 @@ export async function createStudentQrTemplateSvg(token) {
   const background = compactTemplateDataUri();
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 1024 1536" role="img" aria-label="GEU student QR card">\n  <image href="${background}" x="0" y="0" width="1024" height="1536" preserveAspectRatio="none"/>\n  ${positionedQr}\n</svg>`;
 }
+
+export function createStudentQrImage(token) {
+  const qr = QRCode.create(`GEUQR1:${token}`, { errorCorrectionLevel: 'M' });
+  const margin = 2;
+  const scale = 4;
+  const size = (qr.modules.size + margin * 2) * scale;
+  const image = new PNG({ width: size, height: size });
+  image.data.fill(255);
+  for (let y = 0; y < qr.modules.size; y += 1) {
+    for (let x = 0; x < qr.modules.size; x += 1) {
+      if (!qr.modules.get(x, y)) continue;
+      for (let offsetY = 0; offsetY < scale; offsetY += 1) {
+        for (let offsetX = 0; offsetX < scale; offsetX += 1) {
+          const pixel = ((((y + margin) * scale + offsetY) * size + ((x + margin) * scale + offsetX)) << 2);
+          image.data[pixel] = 0;
+          image.data[pixel + 1] = 0;
+          image.data[pixel + 2] = 0;
+          image.data[pixel + 3] = 255;
+        }
+      }
+    }
+  }
+  return PNG.sync.write(image, { colorType: 0, deflateLevel: 9, deflateStrategy: 3 });
+}

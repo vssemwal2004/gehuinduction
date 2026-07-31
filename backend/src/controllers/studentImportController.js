@@ -3,9 +3,9 @@ import { zipSync, strToU8 } from 'fflate';
 import ImportJob from '../models/ImportJob.js';
 import Student from '../models/Student.js';
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
-import { createStudentQrCard, createStudentQrTemplateSvg } from '../services/qrCardService.js';
+import { createStudentQrCard, createStudentQrImage, createStudentQrTemplateSvg } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
-import { createSimpleXlsx } from '../utils/xlsx.js';
+import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
 import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
@@ -159,14 +159,18 @@ export async function exportStudentsExcel(req, res) {
       'Created At',
       'Updated At',
       'QR Link',
+      'QR Image',
     ],
   ];
+  const imagesByRow = new Map();
   for (const student of students) {
     const canExportQr = student.isActive && !student.qrRevokedAt;
     let qrLink = 'Inactive';
     if (canExportQr) {
       const qr = await ensureQrData(student);
       qrLink = publicQrUrl(req, qr.tokenHash);
+      const rowIndex = rows.length;
+      imagesByRow.set(rowIndex, { name: `${qr.tokenHash}.png`, buffer: createStudentQrImage(qr.token) });
     }
     rows.push([
       student.name,
@@ -184,10 +188,11 @@ export async function exportStudentsExcel(req, res) {
       student.createdAt ? new Date(student.createdAt).toISOString() : '',
       student.updatedAt ? new Date(student.updatedAt).toISOString() : '',
       qrLink,
+      canExportQr ? 'QR image' : 'Inactive',
     ]);
   }
 
-  const workbook = createSimpleXlsx(rows, 'Students');
+  const workbook = createXlsxWithImages(rows, imagesByRow, 'Students');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-students', req)}.xlsx"`);
   res.send(workbook);
