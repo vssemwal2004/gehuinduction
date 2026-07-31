@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
-    "jsqr": "^1.4.0",
+    "@zxing/browser": "^0.1.5",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
