@@ -1,4 +1,3 @@
-import QRCode from 'qrcode';
 import mongoose from 'mongoose';
 import { zipSync, strToU8 } from 'fflate';
 import ImportJob from '../models/ImportJob.js';
@@ -14,7 +13,6 @@ const TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
   ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
 ];
-const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
 function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
@@ -49,6 +47,10 @@ function groupCodes(student) {
   return Array.isArray(student.groupIds)
     ? student.groupIds.map((group) => group?.code).filter(Boolean).join(', ')
     : '';
+}
+
+function publicQrUrl(req, tokenHash) {
+  return `${req.protocol}://${req.get('host')}/api/public/qr/${tokenHash}`;
 }
 
 export function downloadStudentTemplate(_req, res) {
@@ -164,7 +166,7 @@ export async function exportStudentsExcel(req, res) {
     let qrLink = 'Inactive';
     if (canExportQr) {
       const qr = await ensureQrData(student);
-      qrLink = `${QR_LINK_BASE}${qr.tokenHash}`;
+      qrLink = publicQrUrl(req, qr.tokenHash);
     }
     rows.push([
       student.name,
@@ -208,11 +210,11 @@ export async function downloadQrPackage(req, res) {
       const qr = await ensureQrData(student);
       const fileName = `${safeFileName(student.studentId)}.svg`;
       const image = await createStudentQrTemplateSvg(qr.token);
-      return { student, fileName, image };
+      return { student, fileName, image, tokenHash: qr.tokenHash };
     }));
-    generated.forEach(({ student, fileName, image }) => {
+    generated.forEach(({ student, fileName, image, tokenHash }) => {
       files[`qr-codes/${fileName}`] = strToU8(image);
-      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), `${QR_LINK_BASE}${fileName.replace(/\.(?:png|svg)$/, '')}`, fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(req, tokenHash), fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
@@ -221,6 +223,21 @@ export async function downloadQrPackage(req, res) {
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-qr-package', req)}-${Date.now()}.zip"`);
   res.send(archive);
+}
+
+export async function openPublicStudentQr(req, res) {
+  const tokenHash = String(req.params.tokenHash || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(tokenHash)) throw new HttpError(404, 'QR card not found');
+  const student = await Student.findOne({ qrTokenHash: tokenHash, isActive: true, qrRevokedAt: { $exists: false } })
+    .select('+qrTokenEncrypted')
+    .lean();
+  if (!student) throw new HttpError(404, 'QR card not found');
+  const token = decryptQrToken(student.qrTokenEncrypted);
+  const image = await createStudentQrTemplateSvg(token);
+  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(image);
 }
 
 export async function downloadStudentQr(req, res) {

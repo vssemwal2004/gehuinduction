@@ -11,6 +11,7 @@ import studentRoutes from './routes/studentRoutes.js';
 import coordinatorRoutes from './routes/coordinatorRoutes.js';
 import scanRoutes from './routes/scanRoutes.js';
 import operationsRoutes from './routes/operationsRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
 import { activityLogger } from './middleware/activityLogger.js';
 import { requireTrustedOrigin } from './middleware/originGuard.js';
 
@@ -26,6 +27,7 @@ export function createApp() {
   app.use(requireTrustedOrigin);
   app.use(activityLogger);
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'geu-induction-connect' }));
+  app.use('/api/public', publicRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/groups', groupRoutes);
