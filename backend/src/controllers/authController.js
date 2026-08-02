@@ -2,6 +2,7 @@ import { z } from 'zod';
 import User from '../models/User.js';
 import { accessCookieOptions, signAccessToken } from '../services/tokenService.js';
 import { HttpError } from '../utils/httpError.js';
+import { isSuperAdmin } from '../middleware/auth.js';
 
 const loginSchema = z.object({
   email: z.string().trim().email(),
@@ -15,6 +16,7 @@ function publicUser(user) {
     email: user.email,
     mobile: user.mobile || '',
     role: user.role,
+    isSuperAdmin: isSuperAdmin(user),
   };
 }
 

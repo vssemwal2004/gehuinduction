@@ -12,7 +12,7 @@ import ScannerPage from './pages/ScannerPage';
 import OperationsPage from './pages/OperationsPage';
 import SettingsPage from './pages/SettingsPage';
 
-const navItems = [
+const fullAccessNavItems = [
   ['Dashboard', LayoutDashboard],
   ['Students', Users],
   ['Student QR Data', Database],
@@ -21,6 +21,9 @@ const navItems = [
   ['Activity Logs', Activity],
   ['Settings', Settings],
 ];
+
+const limitedNavItems = fullAccessNavItems.filter(([label]) => ['Dashboard', 'Students'].includes(label));
+const SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
 
 function LoadingScreen() {
   return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading…</div>;
@@ -36,6 +39,8 @@ function AdminDashboard() {
   const [activePage, setActivePage] = useState('Dashboard');
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState('');
+  const hasFullAccess = user.isSuperAdmin === true || user.email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+  const navItems = hasFullAccess ? fullAccessNavItems : limitedNavItems;
 
   useEffect(() => {
     api('/dashboard/admin').then(setDashboard).catch((requestError) => setError(requestError.message));

@@ -11,7 +11,7 @@ import {
   previewStudentQrDataImport,
   updateStudentQrData,
 } from '../controllers/studentQrDataController.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, requireSuperAdmin } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -25,7 +25,7 @@ const upload = multer({
 });
 const importLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
 
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireRole('admin'), requireSuperAdmin);
 router.get('/template', downloadStudentQrDataTemplate);
 router.post('/import/preview', importLimiter, upload.single('file'), asyncHandler(previewStudentQrDataImport));
 router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler(commitStudentQrDataImport));

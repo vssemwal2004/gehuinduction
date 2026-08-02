@@ -10,6 +10,7 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4100),
   MONGODB_URI: z.string().min(1),
+  MONGODB_DB_NAME: z.string().trim().min(1).default('rfid_registration'),
   JWT_SECRET: z.string().min(24),
   QR_ENCRYPTION_KEY: z.string().min(32),
   FRONTEND_ORIGIN: z.string().url(),
