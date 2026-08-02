@@ -21,10 +21,12 @@ function isSuccessResponse(data) {
 export async function sendMsg91Otp(phone) {
   if (!isMsg91OtpConfigured()) throw new HttpError(500, 'MSG91 OTP is not configured');
   const mobile = toMsg91Mobile(phone);
-  const url = new URL(BASE_URL);
-  url.searchParams.set('template_id', env.MSG91_OTP_TEMPLATE_ID);
-  url.searchParams.set('mobile', mobile);
-  url.searchParams.set('authkey', env.MSG91_AUTHKEY);
+  const params = new URLSearchParams({
+    template_id: env.MSG91_OTP_TEMPLATE_ID,
+    mobile,
+    authkey: env.MSG91_AUTHKEY,
+  });
+  const url = `${BASE_URL}?${params.toString()}`;
 
   if (env.NODE_ENV !== 'production') {
     console.log('MSG91 OTP request', { templateId: env.MSG91_OTP_TEMPLATE_ID, mobile });
@@ -32,11 +34,20 @@ export async function sendMsg91Otp(phone) {
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({}),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !isSuccessResponse(data)) {
+    console.error('MSG91 OTP failed', {
+      status: response.status,
+      templateId: env.MSG91_OTP_TEMPLATE_ID,
+      mobile,
+      response: data,
+    });
     throw new HttpError(response.ok ? 502 : response.status, data?.message || 'MSG91 failed to send OTP');
   }
   return data;
