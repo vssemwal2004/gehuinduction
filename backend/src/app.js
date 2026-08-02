@@ -8,10 +8,12 @@ import authRoutes from './routes/authRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
 import studentRoutes from './routes/studentRoutes.js';
+import studentQrDataRoutes from './routes/studentQrDataRoutes.js';
 import coordinatorRoutes from './routes/coordinatorRoutes.js';
 import scanRoutes from './routes/scanRoutes.js';
 import operationsRoutes from './routes/operationsRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
+import studentAuthRoutes from './routes/studentAuthRoutes.js';
 import { activityLogger } from './middleware/activityLogger.js';
 import { requireTrustedOrigin } from './middleware/originGuard.js';
 
@@ -28,10 +30,12 @@ export function createApp() {
   app.use(activityLogger);
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'geu-induction-connect' }));
   app.use('/api/public', publicRoutes);
+  app.use('/api/student-auth', studentAuthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/students', studentRoutes);
+  app.use('/api/student-qr-data', studentQrDataRoutes);
   app.use('/api/coordinators', coordinatorRoutes);
   app.use('/api/scans', scanRoutes);
   app.use('/api/operations', operationsRoutes);

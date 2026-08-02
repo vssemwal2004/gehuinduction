@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Activity, LayoutDashboard, LogOut, QrCode, Settings, UserRound, Users } from 'lucide-react';
+import { Activity, Database, LayoutDashboard, LogOut, QrCode, Settings, UserRound, Users } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { api } from './lib/api';
 import LoginPage from './pages/LoginPage';
+import StudentLoginPage from './pages/StudentLoginPage';
 import GroupsPage from './pages/GroupsPage';
 import StudentsPage from './pages/StudentsPage';
+import StudentQrDataPage from './pages/StudentQrDataPage';
 import CoordinatorsPage from './pages/CoordinatorsPage';
 import ScannerPage from './pages/ScannerPage';
 import OperationsPage from './pages/OperationsPage';
@@ -13,6 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 const navItems = [
   ['Dashboard', LayoutDashboard],
   ['Students', Users],
+  ['Student QR Data', Database],
   ['Coordinators', UserRound],
   ['Groups & WhatsApp', QrCode],
   ['Activity Logs', Activity],
@@ -46,8 +49,8 @@ function AdminDashboard() {
       <div className="absolute inset-x-3 bottom-3 border-t border-slate-200 pt-3"><button onClick={logout} className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"><LogOut size={17}/>Sign out</button></div>
     </aside>
     <main className="min-w-0 lg:pl-60">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4 lg:px-8"><div className="flex min-w-0 items-center justify-between gap-3"><div className="min-w-0 flex-1 lg:hidden"><div className="truncate text-sm font-bold text-blue-700">GEU Induction Connect</div><select value={activePage} onChange={(e) => setActivePage(e.target.value)} className="mt-1 h-9 w-full max-w-[220px] rounded-md border border-slate-300 px-2 text-xs"><option>Dashboard</option><option>Students</option><option>Coordinators</option><option>Groups & WhatsApp</option><option>Activity Logs</option><option>Settings</option></select></div><div className="hidden lg:block"><div className="text-sm font-semibold text-slate-900">{activePage}</div><p className="mt-1 text-xs text-slate-500">GEU Induction Programme 2026</p></div><div className="min-w-0 max-w-[42%] text-right sm:max-w-xs"><div className="truncate text-sm font-semibold">{user.name}</div><div className="hidden truncate text-xs text-slate-500 sm:block">{user.email}</div></div></div></header>
-      {activePage === 'Groups & WhatsApp' ? <div className="p-4 sm:p-6 xl:p-8"><GroupsPage/></div> : activePage === 'Students' ? <div className="p-4 sm:p-6 xl:p-8"><StudentsPage/></div> : activePage === 'Coordinators' ? <div className="p-4 sm:p-6 xl:p-8"><CoordinatorsPage/></div> : activePage === 'Activity Logs' ? <div className="p-4 sm:p-6 xl:p-8"><OperationsPage/></div> : activePage === 'Settings' ? <div className="p-4 sm:p-6 xl:p-8"><SettingsPage/></div> : <div className="space-y-5 p-4 sm:p-6 xl:p-8">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4 lg:px-8"><div className="flex min-w-0 items-center justify-between gap-3"><div className="min-w-0 flex-1 lg:hidden"><div className="truncate text-sm font-bold text-blue-700">GEU Induction Connect</div><select value={activePage} onChange={(e) => setActivePage(e.target.value)} className="mt-1 h-9 w-full max-w-[220px] rounded-md border border-slate-300 px-2 text-xs">{navItems.map(([label]) => <option key={label}>{label}</option>)}</select></div><div className="hidden lg:block"><div className="text-sm font-semibold text-slate-900">{activePage}</div><p className="mt-1 text-xs text-slate-500">GEU Induction Programme 2026</p></div><div className="min-w-0 max-w-[42%] text-right sm:max-w-xs"><div className="truncate text-sm font-semibold">{user.name}</div><div className="hidden truncate text-xs text-slate-500 sm:block">{user.email}</div></div></div></header>
+      {activePage === 'Groups & WhatsApp' ? <div className="p-4 sm:p-6 xl:p-8"><GroupsPage/></div> : activePage === 'Students' ? <div className="p-4 sm:p-6 xl:p-8"><StudentsPage/></div> : activePage === 'Student QR Data' ? <div className="p-4 sm:p-6 xl:p-8"><StudentQrDataPage/></div> : activePage === 'Coordinators' ? <div className="p-4 sm:p-6 xl:p-8"><CoordinatorsPage/></div> : activePage === 'Activity Logs' ? <div className="p-4 sm:p-6 xl:p-8"><OperationsPage/></div> : activePage === 'Settings' ? <div className="p-4 sm:p-6 xl:p-8"><SettingsPage/></div> : <div className="space-y-5 p-4 sm:p-6 xl:p-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <Stat label="Total students" value={counts.totalStudents ?? '—'}/>
@@ -70,7 +73,9 @@ function AdminDashboard() {
 
 export default function App() {
   const { user, loading } = useAuth();
+  const isStaffRoute = window.location.pathname.replace(/\/+$/, '') === '/link/new/every/admin';
   if (loading) return <LoadingScreen />;
+  if (!isStaffRoute) return <StudentLoginPage />;
   if (!user) return <LoginPage />;
   if (user.role === 'admin') return <AdminDashboard />;
   if (user.role === 'scan_coordinator') return <ScannerPage />;

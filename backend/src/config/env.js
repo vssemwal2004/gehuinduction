@@ -21,8 +21,14 @@ const schema = z.object({
   SMTP_USER: z.string().min(1),
   SMTP_PASS: z.string().min(1),
   MAIL_FROM: z.string().email(),
+  MSG91_AUTHKEY: z.string().trim().optional(),
+  MSG91_OTP_TEMPLATE_ID: z.string().trim().optional(),
+  MSG91_DEFAULT_COUNTRY_CODE: z.string().trim().regex(/^\d{1,4}$/).default('91'),
   TRUST_PROXY: z.string().regex(/^(false|[1-9]\d*)$/).default('false').transform((value) => value === 'false' ? false : Number(value)),
 }).superRefine((value, context) => {
+  if (Boolean(value.MSG91_AUTHKEY) !== Boolean(value.MSG91_OTP_TEMPLATE_ID)) {
+    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'MSG91_AUTHKEY and MSG91_OTP_TEMPLATE_ID must be configured together' });
+  }
   if (value.NODE_ENV !== 'production') return;
   if (value.JWT_SECRET.length < 48 || /change|secret/i.test(value.JWT_SECRET)) {
     context.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'Production JWT secret must be random and at least 48 characters' });
@@ -35,6 +41,9 @@ const schema = z.object({
   }
   if (!value.SMTP_SECURE) {
     context.addIssue({ code: 'custom', path: ['SMTP_SECURE'], message: 'Production SMTP connection must use TLS' });
+  }
+  if (!value.MSG91_AUTHKEY || !value.MSG91_OTP_TEMPLATE_ID) {
+    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Production student OTP login requires MSG91_AUTHKEY and MSG91_OTP_TEMPLATE_ID' });
   }
 });
 
