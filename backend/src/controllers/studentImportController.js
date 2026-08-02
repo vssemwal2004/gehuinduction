@@ -50,8 +50,8 @@ function groupCodes(student) {
     : '';
 }
 
-function publicQrUrl(studentId) {
-  return `${QR_LINK_BASE}${encodeURIComponent(String(studentId).trim())}`;
+function publicQrUrl(tokenHash) {
+  return `${QR_LINK_BASE}${encodeURIComponent(String(tokenHash).trim().toLowerCase())}`;
 }
 
 export function downloadStudentTemplate(_req, res) {
@@ -169,7 +169,7 @@ export async function exportStudentsExcel(req, res) {
     let qrLink = 'Inactive';
     if (canExportQr) {
       const qr = await ensureQrData(student);
-      qrLink = publicQrUrl(student.studentId);
+      qrLink = publicQrUrl(qr.tokenHash);
       const rowIndex = rows.length;
       imagesByRow.set(rowIndex, { name: `${qr.tokenHash}.png`, buffer: createStudentQrImage(qr.token) });
     }
@@ -216,11 +216,11 @@ export async function downloadQrPackage(req, res) {
       const qr = await ensureQrData(student);
       const fileName = `${safeFileName(student.studentId)}.svg`;
       const image = await createStudentQrTemplateSvg(qr.token);
-      return { student, fileName, image };
+      return { student, fileName, image, tokenHash: qr.tokenHash };
     }));
-    generated.forEach(({ student, fileName, image }) => {
+    generated.forEach(({ student, fileName, image, tokenHash }) => {
       files[`qr-codes/${fileName}`] = strToU8(image);
-      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(student.studentId), fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(tokenHash), fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));

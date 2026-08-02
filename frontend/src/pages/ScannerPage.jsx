@@ -25,6 +25,7 @@ export default function ScannerPage() {
     delayBetweenScanSuccess: 750,
   }));
   const busyRef = useRef(false);
+  const restartAfterResultRef = useRef(false);
   const [cameraState, setCameraState] = useState('off');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -70,6 +71,12 @@ export default function ScannerPage() {
     }
 
     try {
+      // The result view does not render the video element. A restart must wait
+      // until React has committed the scanner view before decoding begins.
+      if (!videoRef.current) {
+        setCameraState('off');
+        return;
+      }
       const controls = await readerRef.current.decodeFromConstraints(
         cameraConstraints,
         videoRef.current,
@@ -100,6 +107,12 @@ export default function ScannerPage() {
     stream?.getTracks?.().forEach((track) => track.stop());
   }, []);
 
+  useEffect(() => {
+    if (result !== null || !restartAfterResultRef.current) return;
+    restartAfterResultRef.current = false;
+    startCamera();
+  }, [result]);
+
   async function scanImage(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -123,10 +136,10 @@ export default function ScannerPage() {
   }
 
   function reset() {
-    setResult(null);
     setError('');
     busyRef.current = false;
-    startCamera();
+    restartAfterResultRef.current = true;
+    setResult(null);
   }
 
   async function sendAgain() {
