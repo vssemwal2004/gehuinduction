@@ -26,6 +26,10 @@ const schema = z.object({
   MSG91_SMS_TEMPLATE_ID: z.string().trim().optional(),
   MSG91_OTP_VALIDITY_MINUTES: z.coerce.number().int().positive().default(5),
   MSG91_DEFAULT_COUNTRY_CODE: z.string().trim().regex(/^\d{1,4}$/).default('91'),
+  STUDENT_OTP_IP_LIMIT: z.coerce.number().int().positive().default(300),
+  STUDENT_OTP_IP_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
+  STUDENT_OTP_PHONE_HOLD_MINUTES: z.coerce.number().int().positive().default(5),
+  STUDENT_OTP_VERIFY_LIMIT: z.coerce.number().int().positive().default(5),
   TRUST_PROXY: z.string().regex(/^(false|[1-9]\d*)$/).default('false').transform((value) => value === 'false' ? false : Number(value)),
 }).superRefine((value, context) => {
   if (value.MSG91_AUTHKEY && !value.MSG91_OTP_TEMPLATE_ID && !value.MSG91_SMS_TEMPLATE_ID) {
