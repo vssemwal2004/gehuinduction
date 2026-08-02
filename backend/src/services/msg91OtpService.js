@@ -26,6 +26,10 @@ export async function sendMsg91Otp(phone) {
   url.searchParams.set('mobile', mobile);
   url.searchParams.set('authkey', env.MSG91_AUTHKEY);
 
+  if (env.NODE_ENV !== 'production') {
+    console.log('MSG91 OTP request', { templateId: env.MSG91_OTP_TEMPLATE_ID, mobile });
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

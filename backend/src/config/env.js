@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(configDir, '../../.env'), quiet: true });
+dotenv.config({ path: path.resolve(configDir, '../../.env'), quiet: true, override: true });
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
