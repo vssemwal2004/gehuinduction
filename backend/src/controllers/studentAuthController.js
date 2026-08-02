@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import StudentQrData from '../models/StudentQrData.js';
-import { isMsg91OtpConfigured, sendMsg91Otp, toMsg91Mobile, verifyMsg91Otp } from '../services/msg91OtpService.js';
+import { isMsg91OtpConfigured, sendMsg91Otp, toMsg91Mobile } from '../services/msg91OtpService.js';
 import { HttpError } from '../utils/httpError.js';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -40,7 +40,7 @@ export async function requestStudentOtp(req, res) {
   const otp = String(crypto.randomInt(100000, 1000000));
   otpStore.set(phoneKey, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0, qrDataId: qrRecord._id.toString() });
   if (isMsg91OtpConfigured()) {
-    await sendMsg91Otp(phoneKey);
+    await sendMsg91Otp(phoneKey, otp);
     res.json({ message: 'OTP sent', expiresInSeconds: OTP_TTL_MS / 1000 });
     return;
   }
@@ -53,20 +53,6 @@ export async function verifyStudentOtp(req, res) {
 
   const phoneKey = normalizePhone(parsed.data.phone);
   const record = otpStore.get(phoneKey);
-  if (isMsg91OtpConfigured()) {
-    if (!record || record.expiresAt < Date.now()) {
-      otpStore.delete(phoneKey);
-      throw new HttpError(401, 'OTP expired. Request a new one.');
-    }
-    await verifyMsg91Otp(phoneKey, parsed.data.otp);
-    otpStore.delete(phoneKey);
-    const student = await StudentQrData.findById(record.qrDataId)
-      .select('name email phone qrLink isActive')
-      .lean();
-    if (!student || !student.isActive) throw new HttpError(404, 'Student QR data is unavailable');
-    res.json({ student: studentPayload(student) });
-    return;
-  }
   if (!record || record.expiresAt < Date.now()) {
     otpStore.delete(phoneKey);
     throw new HttpError(401, 'OTP expired. Request a new one.');
