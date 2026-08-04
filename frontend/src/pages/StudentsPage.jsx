@@ -113,11 +113,11 @@ function BulkImportModal({ onClose, onImported }) {
   </div></div>;
 }
 
-export default function StudentsPage() {
+export default function StudentsPage({ initialStatus = '' }) {
   const [students, setStudents] = useState([]);
   const [groups, setGroups] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 25 });
-  const [filters, setFilters] = useState({ search: '', status: '', groupId: '', addedDate: '', importId: '' });
+  const [filters, setFilters] = useState({ search: '', status: initialStatus, groupId: '', addedDate: '', importId: '' });
   const [imports, setImports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

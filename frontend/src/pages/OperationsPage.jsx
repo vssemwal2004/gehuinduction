@@ -7,10 +7,10 @@ function Badge({ value }) {
   return <span className={`rounded-full px-2 py-1 text-xs font-medium ${tone}`}>{value}</span>;
 }
 
-export default function OperationsPage() {
-  const [tab, setTab] = useState('activity');
+export default function OperationsPage({ initialTab = 'activity', initialStatus = '' }) {
+  const [tab, setTab] = useState(initialTab);
   const [data, setData] = useState({ logs: [], jobs: [], counts: {}, pagination: {} });
-  const [filters, setFilters] = useState({ search: '', role: '', action: '', status: '', type: '' });
+  const [filters, setFilters] = useState({ search: '', role: '', action: '', status: initialStatus, type: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
