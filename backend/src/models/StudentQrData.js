@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const studentQrDataSchema = new mongoose.Schema({
+export const studentQrDataSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
   phone: { type: String, required: true, unique: true, trim: true, maxlength: 30, index: true },

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 
 export const USER_ROLES = ['admin', 'group_coordinator', 'scan_coordinator'];
 
-const userSchema = new mongoose.Schema({
+export const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
   mobile: { type: String, trim: true, maxlength: 30 },

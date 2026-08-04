@@ -1,9 +1,6 @@
 import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
-import MailJob from '../models/MailJob.js';
-import ScanEvent from '../models/ScanEvent.js';
-import Student from '../models/Student.js';
-import User from '../models/User.js';
+import { getActiveDatabaseContexts } from '../config/database.js';
 import { decryptCredentialPayload } from './credentialService.js';
 
 const transport = nodemailer.createTransport({
@@ -25,7 +22,7 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 }
 
-async function contentFor(job) {
+async function contentFor(job, models) {
   if (job.type === 'coordinator_credentials') {
     const data = decryptCredentialPayload(job.payloadEncrypted);
     return {
@@ -33,7 +30,7 @@ async function contentFor(job) {
       html: `<p>Hello ${escapeHtml(data.name)},</p><p>Your coordinator account is ready.</p><p><strong>Role:</strong> ${escapeHtml(data.role === 'scan_coordinator' ? 'Scan Coordinator' : 'Group Coordinator')}<br><strong>Email:</strong> ${escapeHtml(data.email)}<br><strong>Temporary password:</strong> ${escapeHtml(data.password)}</p><p>Please keep these credentials private.</p>`,
     };
   }
-  const student = await Student.findById(job.studentId)
+  const student = await models.Student.findById(job.studentId)
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile')
     .lean();
@@ -45,19 +42,19 @@ async function contentFor(job) {
   };
 }
 
-async function processOne() {
+async function processOne(models) {
   const now = new Date();
-  const job = await MailJob.findOneAndUpdate(
+  const job = await models.MailJob.findOneAndUpdate(
     { status: 'queued', nextAttemptAt: { $lte: now } },
     { $set: { status: 'processing' }, $inc: { attempts: 1 } },
     { sort: { createdAt: 1 }, new: true },
   ).select('+payloadEncrypted +activatePasswordHash');
   if (!job) return false;
   try {
-    const content = await contentFor(job);
+    const content = await contentFor(job, models);
     await transport.sendMail({ from: env.MAIL_FROM, to: job.to, ...content });
     if (job.type === 'coordinator_credentials' && job.activatePasswordHash && job.credentialUserId) {
-      await User.updateOne({ _id: job.credentialUserId, isActive: true }, { $set: { passwordHash: job.activatePasswordHash } });
+      await models.User.updateOne({ _id: job.credentialUserId, isActive: true }, { $set: { passwordHash: job.activatePasswordHash } });
     }
     job.status = 'sent';
     job.sentAt = new Date();
@@ -65,7 +62,7 @@ async function processOne() {
     job.payloadEncrypted = undefined;
     job.activatePasswordHash = undefined;
     await job.save();
-    if (job.scanEventId) await ScanEvent.updateOne({ _id: job.scanEventId }, { $set: { emailTriggered: true } });
+    if (job.scanEventId) await models.ScanEvent.updateOne({ _id: job.scanEventId }, { $set: { emailTriggered: true } });
   } catch (error) {
     const terminal = job.attempts >= 5 || (job.expiresAt && job.expiresAt <= new Date());
     job.status = terminal ? 'failed' : 'queued';
@@ -79,12 +76,16 @@ async function processOne() {
 let timer;
 let running = false;
 export function startMailWorker() {
-  MailJob.updateMany({ status: 'processing', updatedAt: { $lt: new Date(Date.now() - 5 * 60_000) } }, { $set: { status: 'queued', nextAttemptAt: new Date() } }).catch(console.error);
+  for (const context of getActiveDatabaseContexts()) {
+    context.models.MailJob.updateMany({ status: 'processing', updatedAt: { $lt: new Date(Date.now() - 5 * 60_000) } }, { $set: { status: 'queued', nextAttemptAt: new Date() } }).catch(console.error);
+  }
   timer = setInterval(async () => {
     if (running) return;
     running = true;
     try {
-      for (let count = 0; count < 10 && await processOne(); count += 1) { /* bounded batch */ }
+      for (const context of getActiveDatabaseContexts()) {
+        for (let count = 0; count < 10 && await processOne(context.models); count += 1) { /* bounded batch */ }
+      }
     } catch (error) {
       console.error('Mail worker error:', error.message);
     } finally {

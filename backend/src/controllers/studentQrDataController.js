@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { z } from 'zod';
-import StudentQrData from '../models/StudentQrData.js';
+import { getRequestModels } from '../config/database.js';
 import { toMsg91Mobile } from '../services/msg91OtpService.js';
 import { createSimpleXlsx } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
@@ -26,6 +26,7 @@ function duplicateMessage(error) {
 }
 
 export async function listStudentQrData(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(10, Number.parseInt(req.query.limit, 10) || 25));
   const search = String(req.query.search || '').trim();
@@ -39,6 +40,7 @@ export async function listStudentQrData(req, res) {
 }
 
 export async function createStudentQrData(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   const parsed = qrDataSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid QR data');
   try {
@@ -51,6 +53,7 @@ export async function createStudentQrData(req, res) {
 }
 
 export async function updateStudentQrData(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.qrDataId)) throw new HttpError(400, 'Invalid QR data ID');
   const parsed = qrDataSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid QR data');
@@ -65,6 +68,7 @@ export async function updateStudentQrData(req, res) {
 }
 
 export async function deleteStudentQrData(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.qrDataId)) throw new HttpError(400, 'Invalid QR data ID');
   const item = await StudentQrData.findByIdAndDelete(req.params.qrDataId).select('_id').lean();
   if (!item) throw new HttpError(404, 'QR data not found');
@@ -80,16 +84,17 @@ export function downloadStudentQrDataTemplate(_req, res) {
 
 export async function previewStudentQrDataImport(req, res) {
   try {
-    res.json(await validateStudentQrDataImport(req.file));
+    res.json(await validateStudentQrDataImport(req.file, getRequestModels(req)));
   } catch (error) {
     throw new HttpError(400, error.message);
   }
 }
 
 export async function commitStudentQrDataImport(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   let result;
   try {
-    result = await validateStudentQrDataImport(req.file);
+    result = await validateStudentQrDataImport(req.file, getRequestModels(req));
   } catch (error) {
     throw new HttpError(400, error.message);
   }
@@ -110,6 +115,7 @@ export async function commitStudentQrDataImport(req, res) {
 }
 
 export async function exportStudentQrData(req, res) {
+  const { StudentQrData } = getRequestModels(req);
   const search = String(req.query.search || '').trim();
   const query = search ? { $text: { $search: search } } : {};
   const items = await StudentQrData.find(query).sort({ name: 1 }).lean();

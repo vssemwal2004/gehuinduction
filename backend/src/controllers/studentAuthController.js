@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import StudentQrData from '../models/StudentQrData.js';
+import { getActiveDatabaseContexts, getModels } from '../config/database.js';
 import { env } from '../config/env.js';
 import { isMsg91OtpConfigured, sendMsg91Otp, toMsg91Mobile } from '../services/msg91OtpService.js';
 import { HttpError } from '../utils/httpError.js';
@@ -78,11 +78,20 @@ export async function requestStudentOtp(req, res) {
 
   const phoneKey = normalizePhone(parsed.data.phone);
   assertPhoneCanRequestOtp(phoneKey);
-  const qrRecord = await StudentQrData.findOne({ phoneKey, isActive: true }).select('name phone phoneKey').lean();
+  let qrRecord;
+  let dbKey;
+  for (const context of getActiveDatabaseContexts()) {
+    const record = await context.models.StudentQrData.findOne({ phoneKey, isActive: true }).select('name phone phoneKey').lean();
+    if (record) {
+      qrRecord = record;
+      dbKey = context.key;
+      break;
+    }
+  }
   if (!qrRecord) throw new HttpError(404, 'No active student QR data found for this phone number');
 
   const otp = String(crypto.randomInt(100000, 1000000));
-  otpStore.set(phoneKey, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0, qrDataId: qrRecord._id.toString() });
+  otpStore.set(phoneKey, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0, qrDataId: qrRecord._id.toString(), dbKey });
   if (isMsg91OtpConfigured()) {
     await sendMsg91Otp(phoneKey, otp);
     holdPhoneOtpRequests(phoneKey);
@@ -116,6 +125,7 @@ export async function verifyStudentOtp(req, res) {
 
   otpStore.delete(phoneKey);
   phoneVerifyStore.delete(phoneKey);
+  const { StudentQrData } = getModels(record.dbKey);
   const student = await StudentQrData.findById(record.qrDataId)
     .select('name email phone qrLink isActive')
     .lean();

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const importJobSchema = new mongoose.Schema({
+export const importJobSchema = new mongoose.Schema({
   fileName: { type: String, required: true, maxlength: 255 },
   requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   status: { type: String, enum: ['completed', 'rejected', 'failed'], required: true, index: true },

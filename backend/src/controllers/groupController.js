@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
-import Group from '../models/Group.js';
-import Student from '../models/Student.js';
+import { getRequestModels } from '../config/database.js';
 import { groupInputSchema } from '../validators/groupValidator.js';
 import { HttpError } from '../utils/httpError.js';
 
-export async function listGroups(_req, res) {
+export async function listGroups(req, res) {
+  const { Group, Student } = getRequestModels(req);
   const [groups, studentCounts] = await Promise.all([
     Group.find()
       .sort({ isActive: -1, code: 1 })
@@ -25,6 +25,7 @@ export async function listGroups(_req, res) {
 }
 
 export async function createGroup(req, res) {
+  const { Group } = getRequestModels(req);
   const parsed = groupInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid group details');
   const code = parsed.data.code.toUpperCase();
@@ -41,6 +42,7 @@ export async function createGroup(req, res) {
 }
 
 export async function updateGroup(req, res) {
+  const { Group } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.groupId)) throw new HttpError(400, 'Invalid group ID');
   const parsed = groupInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid group details');
@@ -59,6 +61,7 @@ export async function updateGroup(req, res) {
 }
 
 export async function deleteGroup(req, res) {
+  const { Group, Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.groupId)) throw new HttpError(400, 'Invalid group ID');
   const group = await Group.findById(req.params.groupId);
   if (!group) throw new HttpError(404, 'Group not found');

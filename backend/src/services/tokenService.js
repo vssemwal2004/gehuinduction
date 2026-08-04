@@ -3,8 +3,8 @@ import { env } from '../config/env.js';
 
 const TOKEN_TTL = '8h';
 
-export function signAccessToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role }, env.JWT_SECRET, {
+export function signAccessToken(user, dbKey) {
+  return jwt.sign({ sub: user._id.toString(), role: user.role, dbKey }, env.JWT_SECRET, {
     algorithm: 'HS256',
     expiresIn: TOKEN_TTL,
     issuer: 'geu-induction-connect',

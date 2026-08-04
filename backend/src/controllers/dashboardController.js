@@ -1,10 +1,7 @@
-import Group from '../models/Group.js';
-import MailJob from '../models/MailJob.js';
-import ScanEvent from '../models/ScanEvent.js';
-import Student from '../models/Student.js';
-import User from '../models/User.js';
+import { getRequestModels } from '../config/database.js';
 
 export async function getAdminDashboard(req, res) {
+  const { Group, MailJob, ScanEvent, Student, User } = getRequestModels(req);
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 

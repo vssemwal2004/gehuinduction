@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const studentSchema = new mongoose.Schema({
+export const studentSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   studentId: { type: String, required: true, unique: true, trim: true, index: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },

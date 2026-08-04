@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
-import ActivityLog from '../models/ActivityLog.js';
-import MailJob from '../models/MailJob.js';
+import { getRequestModels } from '../config/database.js';
 import { HttpError } from '../utils/httpError.js';
 
 export async function listActivityLogs(req, res) {
+  const { ActivityLog } = getRequestModels(req);
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(10, Number(req.query.limit) || 30));
   const query = {};
@@ -21,6 +21,7 @@ export async function listActivityLogs(req, res) {
 }
 
 export async function listMailJobs(req, res) {
+  const { MailJob } = getRequestModels(req);
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(10, Number(req.query.limit) || 30));
   const query = {};
@@ -35,6 +36,7 @@ export async function listMailJobs(req, res) {
 }
 
 export async function retryMailJob(req, res) {
+  const { MailJob } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.jobId)) throw new HttpError(400, 'Invalid mail job ID');
   const job = await MailJob.findOneAndUpdate(
     { _id: req.params.jobId, status: 'failed' },

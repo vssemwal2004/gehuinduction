@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { parse } from 'csv-parse/sync';
-import MailJob from '../models/MailJob.js';
-import User from '../models/User.js';
+import { getDatabaseContext, getRequestModels } from '../config/database.js';
 import { encryptCredentialPayload, generateTemporaryPassword } from '../services/credentialService.js';
 import { coordinatorInputSchema } from '../validators/coordinatorValidator.js';
 import { HttpError } from '../utils/httpError.js';
@@ -11,7 +10,7 @@ function validId(value) {
   if (!mongoose.isValidObjectId(value)) throw new HttpError(400, 'Invalid coordinator ID');
 }
 
-async function queueCredentials(user, password, session, activatePasswordHash) {
+async function queueCredentials(MailJob, user, password, session, activatePasswordHash) {
   const document = {
     type: 'coordinator_credentials',
     to: user.email,
@@ -40,7 +39,8 @@ function importRows(file) {
   }));
 }
 
-async function validateImport(file) {
+async function validateImport(file, models) {
+  const { User } = models;
   const rows = importRows(file);
   const existing = new Set((await User.find({ email: { $in: rows.map((row) => row.email) } }).select('email').lean()).map((item) => item.email));
   const seen = new Set();
@@ -62,19 +62,20 @@ export function downloadCoordinatorTemplate(_req, res) {
 }
 
 export async function previewCoordinatorImport(req, res) {
-  res.json(await validateImport(req.file));
+  res.json(await validateImport(req.file, getRequestModels(req)));
 }
 
 export async function commitCoordinatorImport(req, res) {
-  const result = await validateImport(req.file);
+  const { MailJob, User } = getRequestModels(req);
+  const result = await validateImport(req.file, getRequestModels(req));
   if (result.errorCount) throw new HttpError(400, `Import has ${result.errorCount} invalid row(s). Correct them first.`);
-  const session = await mongoose.startSession();
+  const session = await getDatabaseContext(req.dbKey).connection.startSession();
   try {
     await session.withTransaction(async () => {
       for (const row of result.rows) {
         const password = generateTemporaryPassword();
         const [user] = await User.create([{ name: row.name, email: row.email, mobile: row.mobile, role: 'scan_coordinator', passwordHash: await User.hashPassword(password) }], { session });
-        await queueCredentials(user, password, session);
+        await queueCredentials(MailJob, user, password, session);
       }
     });
   } catch (error) {
@@ -86,6 +87,7 @@ export async function commitCoordinatorImport(req, res) {
 }
 
 export async function listCoordinators(req, res) {
+  const { User } = getRequestModels(req);
   const query = { role: 'scan_coordinator' };
   if (req.query.status === 'active') query.isActive = true;
   if (req.query.status === 'inactive') query.isActive = false;
@@ -101,17 +103,19 @@ export async function listCoordinators(req, res) {
 }
 
 export async function createCoordinator(req, res) {
+  const { MailJob, User } = getRequestModels(req);
   const parsed = coordinatorInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid coordinator details');
   const email = parsed.data.email.toLowerCase();
   if (await User.exists({ email })) throw new HttpError(409, 'Email is already registered');
   const password = generateTemporaryPassword();
   const user = await User.create({ ...parsed.data, email, role: 'scan_coordinator', passwordHash: await User.hashPassword(password) });
-  await queueCredentials(user, password);
+  await queueCredentials(MailJob, user, password);
   res.status(201).json({ coordinator: user, credentialMailQueued: true });
 }
 
 export async function updateCoordinator(req, res) {
+  const { User } = getRequestModels(req);
   validId(req.params.coordinatorId);
   const parsed = coordinatorInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid coordinator details');
@@ -124,6 +128,7 @@ export async function updateCoordinator(req, res) {
 }
 
 export async function setCoordinatorActive(req, res) {
+  const { User } = getRequestModels(req);
   validId(req.params.coordinatorId);
   const active = req.body?.isActive;
   if (typeof active !== 'boolean') throw new HttpError(400, 'isActive must be true or false');
@@ -135,11 +140,12 @@ export async function setCoordinatorActive(req, res) {
 }
 
 export async function resendCoordinatorCredentials(req, res) {
+  const { MailJob, User } = getRequestModels(req);
   validId(req.params.coordinatorId);
   const user = await User.findOne({ _id: req.params.coordinatorId, role: 'scan_coordinator', isActive: true });
   if (!user) throw new HttpError(404, 'Active coordinator not found');
   const password = generateTemporaryPassword();
   const pendingHash = await User.hashPassword(password);
-  await queueCredentials(user, password, undefined, pendingHash);
+  await queueCredentials(MailJob, user, password, undefined, pendingHash);
   res.status(202).json({ credentialMailQueued: true });
 }

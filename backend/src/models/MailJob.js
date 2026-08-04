@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 
-const mailJobSchema = new mongoose.Schema({
+export const mailJobSchema = new mongoose.Schema({
   idempotencyKey: { type: String, default: () => crypto.randomUUID(), index: true },
   type: { type: String, enum: ['scan_details', 'coordinator_credentials'], required: true },
   to: { type: String, required: true, lowercase: true, trim: true },

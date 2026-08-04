@@ -1,7 +1,5 @@
 import mongoose from 'mongoose';
-import MailJob from '../models/MailJob.js';
-import ScanEvent from '../models/ScanEvent.js';
-import Student from '../models/Student.js';
+import { getRequestModels } from '../config/database.js';
 import { hashQrToken } from '../services/qrTokenService.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -22,7 +20,7 @@ function publicStudent(student) {
   };
 }
 
-async function populatedStudent(id) {
+async function populatedStudent(Student, id) {
   return Student.findById(id)
     .select('name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus scanCount isActive')
     .populate('groupIds', 'name code whatsappLink')
@@ -31,6 +29,7 @@ async function populatedStudent(id) {
 }
 
 export async function scanQr(req, res) {
+  const { MailJob, ScanEvent, Student } = getRequestModels(req);
   const payload = String(req.body?.payload || '').trim();
   if (!/^GEUQR1:[A-Za-z0-9_-]{40,60}$/.test(payload)) throw new HttpError(400, 'This is not a valid GEU Induction QR code');
   const token = payload.slice(7);
@@ -58,11 +57,12 @@ export async function scanQr(req, res) {
   if (firstScan) {
     await MailJob.create({ type: 'scan_details', to: student.email, studentId: student._id, requestedBy: req.user._id, scanEventId: event._id });
   }
-  const details = await populatedStudent(student._id);
+  const details = await populatedStudent(Student, student._id);
   res.json({ student: publicStudent(details), firstScan, mailQueued: firstScan, scanEventId: event._id });
 }
 
 export async function sendScanMailAgain(req, res) {
+  const { MailJob, ScanEvent, Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findOne({ _id: req.params.studentId, isActive: true, registrationStatus: 'registered' }).select('email').lean();
   if (!student) throw new HttpError(404, 'Registered student not found');

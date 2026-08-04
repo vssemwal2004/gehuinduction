@@ -1,5 +1,5 @@
 import { parse } from 'csv-parse/sync';
-import StudentQrData from '../models/StudentQrData.js';
+import { getModels } from '../config/database.js';
 import { parseSimpleXlsx } from '../utils/xlsx.js';
 import { toMsg91Mobile } from './msg91OtpService.js';
 
@@ -25,7 +25,8 @@ function validUrl(value) {
   }
 }
 
-export async function validateStudentQrDataImport(file) {
+export async function validateStudentQrDataImport(file, models = getModels()) {
+  const { StudentQrData } = models;
   if (!file) throw new Error('Select a QR data import file');
   const rows = parseRows(file);
   if (rows.length < 2) throw new Error('The file does not contain student QR rows');

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const activityLogSchema = new mongoose.Schema({
+export const activityLogSchema = new mongoose.Schema({
   actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   actorName: { type: String, maxlength: 120 },
   actorRole: { type: String, maxlength: 40, index: true },

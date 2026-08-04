@@ -1,4 +1,4 @@
-import ActivityLog from '../models/ActivityLog.js';
+import { getRequestModels } from '../config/database.js';
 
 const mutationMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -6,6 +6,7 @@ export function activityLogger(req, res, next) {
   if (!mutationMethods.has(req.method)) return next();
   res.on('finish', () => {
     if (!req.user || req.path === '/api/auth/logout') return;
+    const { ActivityLog } = getRequestModels(req);
     ActivityLog.create({
       actorId: req.user._id,
       actorName: req.user.name,

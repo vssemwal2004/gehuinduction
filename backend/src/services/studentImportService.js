@@ -1,6 +1,5 @@
 import { parse } from 'csv-parse/sync';
-import Group from '../models/Group.js';
-import Student from '../models/Student.js';
+import { getModels } from '../config/database.js';
 import { parseSimpleXlsx } from '../utils/xlsx.js';
 
 const HEADERS = ['student name', 'student id', 'email', 'group code', 'group coordinator name', 'group coordinator mobile'];
@@ -18,7 +17,8 @@ function parseRows(file) {
   throw new Error('Upload an .xlsx or .csv file');
 }
 
-export async function validateStudentImport(file) {
+export async function validateStudentImport(file, models = getModels()) {
+  const { Group, Student } = models;
   if (!file) throw new Error('Select a student import file');
   const rows = parseRows(file);
   if (rows.length < 2) throw new Error('The file does not contain student rows');

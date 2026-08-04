@@ -1,9 +1,12 @@
-import User from '../models/User.js';
 import { env } from '../config/env.js';
+import { getActiveDatabaseContexts, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
 
-export async function ensureInitialAdmin() {
-  const email = env.ADMIN_EMAIL.toLowerCase();
-  const existingAdmin = await User.findOne({ email }).select('+passwordHash');
+const FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
+
+async function ensureAdmin(User, { email, password, name, logLabel }) {
+  if (!email || !password) return;
+  const normalizedEmail = email.toLowerCase();
+  const existingAdmin = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
   if (existingAdmin) {
     let changed = false;
     if (existingAdmin.role !== 'admin') {
@@ -14,23 +17,51 @@ export async function ensureInitialAdmin() {
       existingAdmin.isActive = true;
       changed = true;
     }
-    if (!existingAdmin.passwordHash) {
-      existingAdmin.passwordHash = await User.hashPassword(env.ADMIN_PASSWORD);
+    if (!existingAdmin.passwordHash || env.RESET_SEEDED_ADMIN_PASSWORDS) {
+      existingAdmin.passwordHash = await User.hashPassword(password);
       changed = true;
     }
     if (changed) {
       await existingAdmin.save();
-      console.log('Initial administrator repaired');
+      console.log(`${logLabel} repaired`);
     }
     return;
   }
 
   await User.create({
-    name: 'System Administrator',
-    email,
-    passwordHash: await User.hashPassword(env.ADMIN_PASSWORD),
+    name,
+    email: normalizedEmail,
+    passwordHash: await User.hashPassword(password),
     role: 'admin',
     isActive: true,
   });
-  console.log('Initial administrator created');
+  console.log(`${logLabel} created`);
+}
+
+export async function ensureInitialAdmin() {
+  for (const context of getActiveDatabaseContexts()) {
+    const { User } = context.models;
+    if (context.key === PRIMARY_DB_KEY) {
+      await ensureAdmin(User, {
+        email: env.ADMIN_EMAIL,
+        password: env.ADMIN_PASSWORD,
+        name: 'System Administrator',
+        logLabel: 'Initial primary administrator',
+      });
+      await ensureAdmin(User, {
+        email: env.PRIMARY_SUPER_ADMIN_EMAIL || FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL,
+        password: env.PRIMARY_SUPER_ADMIN_PASSWORD || env.ADMIN_PASSWORD,
+        name: 'Primary Super Administrator',
+        logLabel: 'Primary super administrator',
+      });
+    }
+    if (context.key === SECONDARY_DB_KEY) {
+      await ensureAdmin(User, {
+        email: env.SECONDARY_SUPER_ADMIN_EMAIL,
+        password: env.SECONDARY_SUPER_ADMIN_PASSWORD,
+        name: 'Secondary Super Administrator',
+        logLabel: 'Secondary super administrator',
+      });
+    }
+  }
 }

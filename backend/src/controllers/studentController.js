@@ -1,12 +1,11 @@
 import mongoose from 'mongoose';
-import Group from '../models/Group.js';
-import Student from '../models/Student.js';
+import { getRequestModels } from '../config/database.js';
 import { createQrToken } from '../services/qrTokenService.js';
 import { studentInputSchema } from '../validators/studentValidator.js';
 import { HttpError } from '../utils/httpError.js';
 import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
-async function resolveGroups(groupIds) {
+async function resolveGroups(Group, groupIds) {
   const ids = [...new Set(groupIds)];
   const groups = await Group.find({ _id: { $in: ids }, isActive: true })
     .select('_id name code')
@@ -23,6 +22,7 @@ function duplicateMessage(error) {
 }
 
 export async function listStudents(req, res) {
+  const { Student } = getRequestModels(req);
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(10, Number.parseInt(req.query.limit, 10) || 25));
   const query = studentFilterFromRequest(req);
@@ -52,6 +52,7 @@ export async function listStudents(req, res) {
 }
 
 export async function getStudent(req, res) {
+  const { Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findById(req.params.studentId)
     .populate('groupIds', 'name code whatsappLink')
@@ -63,9 +64,10 @@ export async function getStudent(req, res) {
 }
 
 export async function createStudent(req, res) {
+  const { Group, Student } = getRequestModels(req);
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const { ids } = await resolveGroups(parsed.data.groupIds);
+  const { ids } = await resolveGroups(Group, parsed.data.groupIds);
   const qr = createQrToken();
   try {
     const student = await Student.create({
@@ -86,10 +88,11 @@ export async function createStudent(req, res) {
 }
 
 export async function updateStudent(req, res) {
+  const { Group, Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const { ids } = await resolveGroups(parsed.data.groupIds);
+  const { ids } = await resolveGroups(Group, parsed.data.groupIds);
   try {
     const student = await Student.findByIdAndUpdate(req.params.studentId, {
       name: parsed.data.name,
@@ -108,6 +111,7 @@ export async function updateStudent(req, res) {
 }
 
 export async function deactivateStudent(req, res) {
+  const { Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findByIdAndUpdate(req.params.studentId, {
     isActive: false,
@@ -119,6 +123,7 @@ export async function deactivateStudent(req, res) {
 }
 
 export async function reactivateStudent(req, res) {
+  const { Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findByIdAndUpdate(req.params.studentId, {
     $set: {

@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { zipSync, strToU8 } from 'fflate';
-import ImportJob from '../models/ImportJob.js';
-import Student from '../models/Student.js';
+import { getActiveDatabaseContexts, getDatabaseContext, getRequestModels } from '../config/database.js';
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
 import { createStudentQrCard, createStudentQrImage, createStudentQrTemplateSvg } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
@@ -19,11 +18,11 @@ function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
 }
 
-async function ensureQrToken(student) {
-  return (await ensureQrData(student)).token;
+async function ensureQrToken(Student, student) {
+  return (await ensureQrData(Student, student)).token;
 }
 
-async function ensureQrData(student) {
+async function ensureQrData(Student, student) {
   if (student.qrTokenEncrypted) {
     const token = decryptQrToken(student.qrTokenEncrypted);
     const tokenHash = student.qrTokenHash || hashQrToken(token);
@@ -63,7 +62,7 @@ export function downloadStudentTemplate(_req, res) {
 
 export async function previewStudentImport(req, res) {
   try {
-    const result = await validateStudentImport(req.file);
+    const result = await validateStudentImport(req.file, getRequestModels(req));
     res.json(result);
   } catch (error) {
     throw new HttpError(400, error.message);
@@ -71,9 +70,10 @@ export async function previewStudentImport(req, res) {
 }
 
 export async function commitStudentImport(req, res) {
+  const { ImportJob, Student } = getRequestModels(req);
   let result;
   try {
-    result = await validateStudentImport(req.file);
+    result = await validateStudentImport(req.file, getRequestModels(req));
   } catch (error) {
     throw new HttpError(400, error.message);
   }
@@ -103,7 +103,7 @@ export async function commitStudentImport(req, res) {
     };
   });
 
-  const session = await mongoose.startSession();
+  const session = await getDatabaseContext(req.dbKey).connection.startSession();
   let job;
   try {
     await session.withTransaction(async () => {
@@ -124,7 +124,8 @@ export async function commitStudentImport(req, res) {
   res.status(201).json({ imported: result.total, importId: job._id });
 }
 
-export async function listImportHistory(_req, res) {
+export async function listImportHistory(req, res) {
+  const { ImportJob, Student } = getRequestModels(req);
   const jobs = await ImportJob.find({ status: 'completed' }).populate('requestedBy', 'name email').sort({ createdAt: -1 }).limit(100).lean();
   const linkedCounts = await Student.aggregate([
     { $match: { importJobId: { $in: jobs.map((job) => job._id) } } },
@@ -135,6 +136,7 @@ export async function listImportHistory(_req, res) {
 }
 
 export async function exportStudentsExcel(req, res) {
+  const { Student } = getRequestModels(req);
   const students = await Student.find(studentFilterFromRequest(req))
     .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .populate('groupIds', 'name code whatsappLink')
@@ -168,7 +170,7 @@ export async function exportStudentsExcel(req, res) {
     const canExportQr = student.isActive && !student.qrRevokedAt;
     let qrLink = 'Inactive';
     if (canExportQr) {
-      const qr = await ensureQrData(student);
+      const qr = await ensureQrData(Student, student);
       qrLink = publicQrUrl(qr.tokenHash);
       const rowIndex = rows.length;
       imagesByRow.set(rowIndex, { name: `${qr.tokenHash}.png`, buffer: createStudentQrImage(qr.token) });
@@ -200,6 +202,7 @@ export async function exportStudentsExcel(req, res) {
 }
 
 export async function downloadQrPackage(req, res) {
+  const { Student } = getRequestModels(req);
   const students = await Student.find({ ...studentFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
     .select('+qrTokenEncrypted +qrTokenHash name studentId email registrationStatus')
     .populate('groupIds', 'name code')
@@ -213,7 +216,7 @@ export async function downloadQrPackage(req, res) {
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
-      const qr = await ensureQrData(student);
+      const qr = await ensureQrData(Student, student);
       const fileName = `${safeFileName(student.studentId)}.svg`;
       const image = await createStudentQrTemplateSvg(qr.token);
       return { student, fileName, image, tokenHash: qr.tokenHash };
@@ -234,9 +237,13 @@ export async function downloadQrPackage(req, res) {
 export async function openPublicStudentQr(req, res) {
   const tokenHash = String(req.params.tokenHash || '').trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(tokenHash)) throw new HttpError(404, 'QR card not found');
-  const student = await Student.findOne({ qrTokenHash: tokenHash, isActive: true, qrRevokedAt: { $exists: false } })
-    .select('+qrTokenEncrypted')
-    .lean();
+  let student;
+  for (const context of getActiveDatabaseContexts()) {
+    student = await context.models.Student.findOne({ qrTokenHash: tokenHash, isActive: true, qrRevokedAt: { $exists: false } })
+      .select('+qrTokenEncrypted')
+      .lean();
+    if (student) break;
+  }
   if (!student) throw new HttpError(404, 'QR card not found');
   const token = decryptQrToken(student.qrTokenEncrypted);
   const image = await createStudentQrTemplateSvg(token);
@@ -247,6 +254,7 @@ export async function openPublicStudentQr(req, res) {
 }
 
 export async function downloadStudentQr(req, res) {
+  const { Student } = getRequestModels(req);
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const student = await Student.findById(req.params.studentId)
     .select('+qrTokenEncrypted +qrTokenHash name studentId isActive qrRevokedAt')
@@ -254,7 +262,7 @@ export async function downloadStudentQr(req, res) {
   if (!student) throw new HttpError(404, 'Student not found');
   if (!student.isActive || student.qrRevokedAt) throw new HttpError(400, 'QR is unavailable for inactive students');
 
-  const token = await ensureQrToken(student);
+  const token = await ensureQrToken(Student, student);
   const image = await createStudentQrCard(token);
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Content-Disposition', `attachment; filename="${safeFileName(student.studentId)}_${safeFileName(student.name)}.png"`);
