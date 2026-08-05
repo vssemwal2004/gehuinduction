@@ -19,6 +19,8 @@ const schema = z.object({
   MONGODB_DB_NAME: z.string().trim().min(1).default('rfid_registration'),
   MONGODB_SECONDARY_URI: optionalTrimmed(z.string().min(1)),
   MONGODB_SECONDARY_DB_NAME: optionalTrimmed(z.string().min(1)),
+  MONGODB_MBA_URI: optionalTrimmed(z.string().min(1)),
+  MONGODB_MBA_DB_NAME: optionalTrimmed(z.string().min(1)),
   JWT_SECRET: z.string().min(24),
   QR_ENCRYPTION_KEY: z.string().min(32),
   FRONTEND_ORIGIN: z.string().url(),
@@ -29,6 +31,8 @@ const schema = z.object({
   PRIMARY_SUPER_ADMIN_PASSWORD: optionalTrimmed(z.string().min(8)),
   SECONDARY_SUPER_ADMIN_EMAIL: optionalTrimmed(z.string().email()),
   SECONDARY_SUPER_ADMIN_PASSWORD: optionalTrimmed(z.string().min(8)),
+  MBA_SUPER_ADMIN_EMAIL: optionalTrimmed(z.string().email()),
+  MBA_SUPER_ADMIN_PASSWORD: optionalTrimmed(z.string().min(8)),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().positive(),
   SMTP_SECURE: z.string().transform((value) => value === 'true'),
@@ -62,6 +66,7 @@ const schema = z.object({
   for (const [path, password] of [
     ['PRIMARY_SUPER_ADMIN_PASSWORD', value.PRIMARY_SUPER_ADMIN_PASSWORD],
     ['SECONDARY_SUPER_ADMIN_PASSWORD', value.SECONDARY_SUPER_ADMIN_PASSWORD],
+    ['MBA_SUPER_ADMIN_PASSWORD', value.MBA_SUPER_ADMIN_PASSWORD],
   ]) {
     if (password && (password.length < 12 || ['admin123', 'password'].includes(password.toLowerCase()))) {
       context.addIssue({ code: 'custom', path: [path], message: 'Production super administrator password must be strong and at least 12 characters' });
@@ -72,6 +77,12 @@ const schema = z.object({
   }
   if (value.SECONDARY_SUPER_ADMIN_EMAIL && !value.SECONDARY_SUPER_ADMIN_PASSWORD) {
     context.addIssue({ code: 'custom', path: ['SECONDARY_SUPER_ADMIN_PASSWORD'], message: 'Configure SECONDARY_SUPER_ADMIN_PASSWORD for the second database super administrator' });
+  }
+  if (value.MONGODB_MBA_URI && !value.MBA_SUPER_ADMIN_EMAIL) {
+    context.addIssue({ code: 'custom', path: ['MBA_SUPER_ADMIN_EMAIL'], message: 'Configure MBA_SUPER_ADMIN_EMAIL when MONGODB_MBA_URI is set' });
+  }
+  if (value.MBA_SUPER_ADMIN_EMAIL && !value.MBA_SUPER_ADMIN_PASSWORD) {
+    context.addIssue({ code: 'custom', path: ['MBA_SUPER_ADMIN_PASSWORD'], message: 'Configure MBA_SUPER_ADMIN_PASSWORD for the MBA database super administrator' });
   }
   if (!value.SMTP_SECURE) {
     context.addIssue({ code: 'custom', path: ['SMTP_SECURE'], message: 'Production SMTP connection must use TLS' });

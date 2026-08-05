@@ -11,6 +11,7 @@ import { userSchema } from '../models/User.js';
 
 export const PRIMARY_DB_KEY = 'primary';
 export const SECONDARY_DB_KEY = 'secondary';
+export const MBA_DB_KEY = 'mba';
 
 const modelSchemas = {
   ActivityLog: activityLogSchema,
@@ -38,6 +39,14 @@ function configuredDatabases() {
       uri: env.MONGODB_SECONDARY_URI,
       dbName: env.MONGODB_SECONDARY_DB_NAME,
       label: 'secondary',
+    });
+  }
+  if (env.MONGODB_MBA_URI) {
+    configs.push({
+      key: MBA_DB_KEY,
+      uri: env.MONGODB_MBA_URI,
+      dbName: env.MONGODB_MBA_DB_NAME,
+      label: 'mba',
     });
   }
   return configs;
