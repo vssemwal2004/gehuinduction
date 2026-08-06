@@ -3,6 +3,7 @@ import {
   createStudent,
   deactivateStudent,
   getStudent,
+  getStudentOptions,
   listStudents,
   reactivateStudent,
   updateStudent,
@@ -37,6 +38,7 @@ router.get('/import/template', asyncHandler(downloadStudentTemplate));
 router.post('/import/preview', importLimiter, upload.single('file'), asyncHandler(previewStudentImport));
 router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler(commitStudentImport));
 router.get('/import/history', asyncHandler(listImportHistory));
+router.get('/config/options', asyncHandler(getStudentOptions));
 router.get('/export.xlsx', asyncHandler(exportStudentsExcel));
 router.get('/qr-package.zip', qrPackageLimiter, asyncHandler(downloadQrPackage));
 router.get('/:studentId/qr.png', asyncHandler(downloadStudentQr));

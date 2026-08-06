@@ -104,6 +104,10 @@ export async function listStudents(req, res) {
   });
 }
 
+export async function getStudentOptions(req, res) {
+  res.json({ options: { requireGroupDetails: await requireGroupDetails(req) } });
+}
+
 export async function getStudent(req, res) {
   const models = getRequestModels(req);
   const { Student } = models;

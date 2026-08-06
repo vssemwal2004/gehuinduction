@@ -15,9 +15,10 @@ function StudentForm({ groups, initialValue, requireGroupDetails, onClose, onSav
     setError('');
     try {
       const editing = Boolean(initialValue?._id);
+      const payload = requireGroupDetails ? form : { ...form, groupIds: [], groupCoordinatorName: '', groupCoordinatorMobile: '' };
       await api(editing ? `/students/${initialValue._id}` : '/students', {
         method: editing ? 'PUT' : 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       onSaved();
     } catch (requestError) {
@@ -35,9 +36,11 @@ function StudentForm({ groups, initialValue, requireGroupDetails, onClose, onSav
         <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student name</span><input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="Full name"/></label>
         <label className="block"><span className="text-xs font-medium text-slate-700">Student ID</span><input required maxLength={60} value={form.studentId} onChange={(e) => setForm({ ...form, studentId: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="GEU2026001"/></label>
         <label className="block"><span className="text-xs font-medium text-slate-700">Email</span><input required type="email" maxLength={180} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="student@example.com"/></label>
-        <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student group</span><select required={requireGroupDetails} value={form.groupIds[0] || ''} onChange={(e) => setForm({ ...form, groupIds: e.target.value ? [e.target.value] : [] })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500"><option value="">Select group</option>{groups.filter((group) => group.isActive).map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select><span className="mt-1.5 block text-[11px] text-slate-500">{requireGroupDetails ? 'The default email uses this group and WhatsApp link.' : 'Optional while custom scan email template is active.'}</span></label>
-        <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator name</span><input required={requireGroupDetails} maxLength={120} value={form.groupCoordinatorName || ''} onChange={(e) => setForm({ ...form, groupCoordinatorName: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="Coordinator name"/></label>
-        <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator mobile</span><input required={requireGroupDetails} maxLength={30} value={form.groupCoordinatorMobile || ''} onChange={(e) => setForm({ ...form, groupCoordinatorMobile: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="+91 9999999999"/></label>
+        {requireGroupDetails ? <>
+          <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student group</span><select required value={form.groupIds[0] || ''} onChange={(e) => setForm({ ...form, groupIds: e.target.value ? [e.target.value] : [] })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500"><option value="">Select group</option>{groups.filter((group) => group.isActive).map((group) => <option key={group._id} value={group._id}>{group.code} — {group.name}</option>)}</select><span className="mt-1.5 block text-[11px] text-slate-500">The default email uses this group and WhatsApp link.</span></label>
+          <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator name</span><input required maxLength={120} value={form.groupCoordinatorName || ''} onChange={(e) => setForm({ ...form, groupCoordinatorName: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="Coordinator name"/></label>
+          <label className="block"><span className="text-xs font-medium text-slate-700">Group coordinator mobile</span><input required maxLength={30} value={form.groupCoordinatorMobile || ''} onChange={(e) => setForm({ ...form, groupCoordinatorMobile: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="+91 9999999999"/></label>
+        </> : null}
         {initialValue?.hasStudentQrData ? <label className="block sm:col-span-2"><span className="text-xs font-medium text-slate-700">Student phone</span><input required maxLength={30} value={form.qrDataPhone || ''} onChange={(e) => setForm({ ...form, qrDataPhone: e.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-blue-500" placeholder="+91 9999999999"/><span className="mt-1.5 block text-[11px] text-slate-500">Updates phone number in Student QR Data only.</span></label> : null}
       </div>
       <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4"><button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button><button disabled={saving} className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving…' : 'Save student'}</button></div>
@@ -158,7 +161,10 @@ export default function StudentsPage({ initialStatus = '' }) {
     }
   }
 
-  useEffect(() => { api('/groups').then((data) => setGroups(data.groups)).catch((requestError) => setError(requestError.message)); }, []);
+  useEffect(() => {
+    api('/groups').then((data) => setGroups(data.groups)).catch((requestError) => setError(requestError.message));
+    api('/students/config/options').then((data) => setOptions(data.options || { requireGroupDetails: true })).catch((requestError) => setError(requestError.message));
+  }, []);
   useEffect(() => { loadImportHistory(); }, []);
   useEffect(() => {
     const timeout = setTimeout(() => load(1), 250);
