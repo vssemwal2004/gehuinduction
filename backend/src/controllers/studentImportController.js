@@ -17,6 +17,14 @@ const CUSTOM_TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email'],
   ['Example Student', 'GEU2026001', 'student@example.com'],
 ];
+const DEFAULT_COURSE_TEMPLATE_ROWS = [
+  ['Student Name', 'Student ID', 'Email', 'Course', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
+  ['Example Student', 'GEU2026001', 'student@example.com', 'BBA AI', 'G1', 'Coordinator Name', '+91 9999999999'],
+];
+const CUSTOM_COURSE_TEMPLATE_ROWS = [
+  ['Student Name', 'Student ID', 'Email', 'Course'],
+  ['Example Student', 'GEU2026001', 'student@example.com', 'BBA AI'],
+];
 const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
 function safeFileName(value) {
@@ -60,12 +68,15 @@ function publicQrUrl(tokenHash) {
 
 async function studentImportOptions(req) {
   const setting = await getEmailTemplateSetting(getRequestModels(req));
-  return { requireGroupDetails: setting.useDefault !== false };
+  return { requireGroupDetails: setting.useDefault !== false, requireCourse: setting.requireCourse === true };
 }
 
 export async function downloadStudentTemplate(req, res) {
   const options = await studentImportOptions(req);
-  const workbook = createSimpleXlsx(options.requireGroupDetails ? DEFAULT_TEMPLATE_ROWS : CUSTOM_TEMPLATE_ROWS, 'Student Import');
+  const rows = options.requireGroupDetails
+    ? (options.requireCourse ? DEFAULT_COURSE_TEMPLATE_ROWS : DEFAULT_TEMPLATE_ROWS)
+    : (options.requireCourse ? CUSTOM_COURSE_TEMPLATE_ROWS : CUSTOM_TEMPLATE_ROWS);
+  const workbook = createSimpleXlsx(rows, 'Student Import');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="geu-student-import-template.xlsx"');
   res.send(workbook);
@@ -106,6 +117,7 @@ export async function commitStudentImport(req, res) {
       name: row.name,
       studentId: row.studentId,
       email: row.email,
+      course: row.course,
       groupIds: row.groupId ? [row.groupId] : [],
       groupCoordinatorName: row.groupCoordinatorName,
       groupCoordinatorMobile: row.groupCoordinatorMobile,
@@ -149,7 +161,7 @@ export async function listImportHistory(req, res) {
 export async function exportStudentsExcel(req, res) {
   const { Student } = getRequestModels(req);
   const students = await Student.find(studentFilterFromRequest(req))
-    .select('+qrTokenEncrypted +qrTokenHash name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email course groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .populate('groupIds', 'name code whatsappLink')
     .populate('groupCoordinatorId', 'name mobile email')
     .sort({ studentId: 1 })
@@ -161,6 +173,7 @@ export async function exportStudentsExcel(req, res) {
       'Student Name',
       'Student ID',
       'Email',
+      'Course',
       'Groups',
       'Group Coordinator',
       'Coordinator Mobile',
@@ -190,6 +203,7 @@ export async function exportStudentsExcel(req, res) {
       student.name,
       student.studentId,
       student.email,
+      student.course || '',
       groupCodes(student),
       student.groupCoordinatorName || student.groupCoordinatorId?.name || '',
       student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || '',
@@ -215,14 +229,14 @@ export async function exportStudentsExcel(req, res) {
 export async function downloadQrPackage(req, res) {
   const { Student } = getRequestModels(req);
   const students = await Student.find({ ...studentFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
-    .select('+qrTokenEncrypted +qrTokenHash name studentId email registrationStatus')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId email course registrationStatus')
     .populate('groupIds', 'name code')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
   const files = {};
-  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Group', 'QR Link', 'QR File Name']];
+  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Course', 'Group', 'QR Link', 'QR File Name']];
   const batchSize = 20;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
@@ -234,7 +248,7 @@ export async function downloadQrPackage(req, res) {
     }));
     generated.forEach(({ student, fileName, image, tokenHash }) => {
       files[`qr-codes/${fileName}`] = strToU8(image);
-      mappingRows.push([student.studentId, student.name, student.email, groupCodes(student), publicQrUrl(tokenHash), fileName]);
+      mappingRows.push([student.studentId, student.name, student.email, student.course || '', groupCodes(student), publicQrUrl(tokenHash), fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));

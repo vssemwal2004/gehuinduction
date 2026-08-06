@@ -4,6 +4,7 @@ export const studentSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   studentId: { type: String, required: true, unique: true, trim: true, index: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
+  course: { type: String, trim: true, maxlength: 120, index: true },
   importJobId: { type: mongoose.Schema.Types.ObjectId, ref: 'ImportJob', index: true },
   groupIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group', index: true }],
   groupCoordinatorName: { type: String, trim: true, maxlength: 120 },
@@ -19,5 +20,5 @@ export const studentSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true, index: true },
 }, { timestamps: true });
 
-studentSchema.index({ name: 'text', email: 'text', studentId: 'text' });
+studentSchema.index({ name: 'text', email: 'text', studentId: 'text', course: 'text' });
 export default mongoose.model('Student', studentSchema);

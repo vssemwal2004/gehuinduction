@@ -16,12 +16,17 @@ async function resolveGroups(Group, groupIds) {
   return { ids };
 }
 
-async function requireGroupDetails(req) {
+async function studentOptions(req) {
   const setting = await getEmailTemplateSetting(getRequestModels(req));
-  return setting.useDefault !== false;
+  return {
+    requireGroupDetails: setting.useDefault !== false,
+    requireCourse: setting.requireCourse === true,
+  };
 }
 
-function assertStudentDetails(parsed, needsGroupDetails) {
+function assertStudentDetails(parsed, options) {
+  const { requireCourse, requireGroupDetails: needsGroupDetails } = options;
+  if (requireCourse && parsed.course.length < 1) throw new HttpError(400, 'Course is required');
   if (!needsGroupDetails) {
     if (parsed.groupCoordinatorMobile && !/^[+0-9 ()-]{7,30}$/.test(parsed.groupCoordinatorMobile)) {
       throw new HttpError(400, 'Enter a valid coordinator mobile number');
@@ -83,7 +88,7 @@ export async function listStudents(req, res) {
     Student.find(query)
       .populate('groupIds', 'name code whatsappLink')
       .populate('groupCoordinatorId', 'name mobile email')
-      .select('name studentId email groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt')
+      .select('name studentId email course groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt')
       .sort({ createdAt: -1, _id: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -99,13 +104,13 @@ export async function listStudents(req, res) {
         mobile: student.groupCoordinatorMobile,
       } : null),
     }))),
-    options: { requireGroupDetails: await requireGroupDetails(req) },
+    options: await studentOptions(req),
     pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
   });
 }
 
 export async function getStudentOptions(req, res) {
-  res.json({ options: { requireGroupDetails: await requireGroupDetails(req) } });
+  res.json({ options: await studentOptions(req) });
 }
 
 export async function getStudent(req, res) {
@@ -126,8 +131,8 @@ export async function createStudent(req, res) {
   const { Group, Student } = getRequestModels(req);
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const needsGroupDetails = await requireGroupDetails(req);
-  assertStudentDetails(parsed.data, needsGroupDetails);
+  const options = await studentOptions(req);
+  assertStudentDetails(parsed.data, options);
   const { ids } = await resolveGroups(Group, parsed.data.groupIds || []);
   const qr = createQrToken();
   try {
@@ -135,6 +140,7 @@ export async function createStudent(req, res) {
       name: parsed.data.name,
       studentId: parsed.data.studentId,
       email: parsed.data.email.toLowerCase(),
+      course: parsed.data.course,
       groupIds: ids,
       groupCoordinatorName: parsed.data.groupCoordinatorName,
       groupCoordinatorMobile: parsed.data.groupCoordinatorMobile,
@@ -154,14 +160,15 @@ export async function updateStudent(req, res) {
   if (!mongoose.isValidObjectId(req.params.studentId)) throw new HttpError(400, 'Invalid student ID');
   const parsed = studentInputSchema.safeParse(req.body);
   if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message || 'Invalid student details');
-  const needsGroupDetails = await requireGroupDetails(req);
-  assertStudentDetails(parsed.data, needsGroupDetails);
+  const options = await studentOptions(req);
+  assertStudentDetails(parsed.data, options);
   const { ids } = await resolveGroups(Group, parsed.data.groupIds || []);
   try {
     const student = await Student.findByIdAndUpdate(req.params.studentId, {
       name: parsed.data.name,
       studentId: parsed.data.studentId,
       email: parsed.data.email.toLowerCase(),
+      course: parsed.data.course,
       groupIds: ids,
       groupCoordinatorName: parsed.data.groupCoordinatorName,
       groupCoordinatorMobile: parsed.data.groupCoordinatorMobile,

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 
 const defaultTemplate = {
   useDefault: true,
+  requireCourse: false,
   subject: 'GEU Induction Programme 2026 — {{groupName}}',
   html: '<p>Hello {{studentName}},</p><p>Your induction registration is confirmed.</p><p><strong>Group:</strong> {{groupName}}<br><strong>Coordinator:</strong> {{coordinatorName}}<br><strong>Contact:</strong> {{coordinatorMobile}}</p><p><a href="{{whatsappLink}}">Join your WhatsApp group</a></p>',
   variables: [],
@@ -24,6 +25,7 @@ export default function SettingsPage() {
 
   const templatePayload = useMemo(() => ({
     useDefault: template.useDefault,
+    requireCourse: template.requireCourse,
     subject: template.subject,
     html: template.html,
   }), [template]);
@@ -118,6 +120,15 @@ export default function SettingsPage() {
             <span>Default template</span>
             <button type="button" onClick={() => setTemplate((current) => ({ ...current, useDefault: !current.useDefault }))} className={`relative h-6 w-11 rounded-full transition ${template.useDefault ? 'bg-blue-600' : 'bg-slate-300'}`} aria-pressed={template.useDefault} aria-label="Toggle default email template">
               <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${template.useDefault ? 'left-6' : 'left-1'}`}/>
+            </button>
+          </label>
+        </div>
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div><h2 className="text-sm font-semibold">Course field</h2><p className="mt-1 text-xs text-slate-500">Require course during student add and bulk import.</p></div>
+          <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
+            <span>Require course</span>
+            <button type="button" onClick={() => setTemplate((current) => ({ ...current, requireCourse: !current.requireCourse }))} className={`relative h-6 w-11 rounded-full transition ${template.requireCourse ? 'bg-blue-600' : 'bg-slate-300'}`} aria-pressed={template.requireCourse} aria-label="Toggle required course field">
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${template.requireCourse ? 'left-6' : 'left-1'}`}/>
             </button>
           </label>
         </div>

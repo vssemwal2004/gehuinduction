@@ -6,6 +6,7 @@ export const TEMPLATE_VARIABLES = [
   'studentName',
   'studentId',
   'studentEmail',
+  'course',
   'groupName',
   'groupCode',
   'coordinatorName',
@@ -28,6 +29,7 @@ export function templateDataForStudent(student) {
     studentName: valueOrFallback(student.name, 'Student'),
     studentId: valueOrFallback(student.studentId, ''),
     studentEmail: valueOrFallback(student.email, ''),
+    course: valueOrFallback(student.course, ''),
     groupName: valueOrFallback(group?.name || group?.code, 'Not assigned'),
     groupCode: valueOrFallback(group?.code, ''),
     coordinatorName: valueOrFallback(student.groupCoordinatorName || student.groupCoordinatorId?.name, 'Not assigned'),
@@ -41,6 +43,7 @@ export function sampleTemplateData() {
     studentName: 'Example Student',
     studentId: 'GEU2026001',
     studentEmail: 'student@example.com',
+    course: 'BBA AI',
     groupName: 'Group A',
     groupCode: 'G1',
     coordinatorName: 'Coordinator Name',
@@ -73,7 +76,7 @@ export function defaultCustomTemplate() {
 export async function getEmailTemplateSetting(models) {
   const setting = await models.EmailTemplateSetting.findOne({ key: SCAN_EMAIL_TEMPLATE_KEY }).lean();
   if (setting) return setting;
-  return { key: SCAN_EMAIL_TEMPLATE_KEY, useDefault: true, subject: '', html: '' };
+  return { key: SCAN_EMAIL_TEMPLATE_KEY, useDefault: true, subject: '', html: '', requireCourse: false };
 }
 
 export async function renderScanEmail(models, student) {

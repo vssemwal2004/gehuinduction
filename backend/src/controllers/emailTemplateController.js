@@ -14,6 +14,7 @@ import { transport } from '../services/mailTransport.js';
 
 const templateSchema = z.object({
   useDefault: z.boolean(),
+  requireCourse: z.boolean().optional().default(false),
   subject: z.string().trim().max(200).optional().default(''),
   html: z.string().max(50000).optional().default(''),
 });
@@ -28,6 +29,7 @@ function publicSetting(setting) {
     useDefault: setting.useDefault !== false,
     subject: setting.subject || fallback.subject,
     html: setting.html || fallback.html,
+    requireCourse: setting.requireCourse === true,
     variables: TEMPLATE_VARIABLES,
   };
 }
@@ -54,6 +56,7 @@ export async function saveEmailTemplate(req, res) {
       $set: {
         key: SCAN_EMAIL_TEMPLATE_KEY,
         useDefault: parsed.data.useDefault,
+        requireCourse: parsed.data.requireCourse,
         subject: parsed.data.subject,
         html: parsed.data.html,
         updatedBy: req.user._id,
