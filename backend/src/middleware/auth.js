@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import { getModels, hasDatabaseContext, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
+import { BBA_DB_KEY, getModels, hasDatabaseContext, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -11,6 +11,7 @@ export function isSuperAdmin(user) {
     [PRIMARY_DB_KEY]: env.PRIMARY_SUPER_ADMIN_EMAIL || FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL,
     [SECONDARY_DB_KEY]: env.SECONDARY_SUPER_ADMIN_EMAIL,
     [MBA_DB_KEY]: env.MBA_SUPER_ADMIN_EMAIL,
+    [BBA_DB_KEY]: env.BBA_SUPER_ADMIN_EMAIL,
   }[dbKey];
   return Boolean(
     configuredEmail

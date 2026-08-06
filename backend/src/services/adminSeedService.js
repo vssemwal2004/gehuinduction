@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import { getActiveDatabaseContexts, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
+import { BBA_DB_KEY, getActiveDatabaseContexts, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
 
 const FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
 
@@ -69,6 +69,14 @@ export async function ensureInitialAdmin() {
         password: env.MBA_SUPER_ADMIN_PASSWORD,
         name: 'MBA Super Administrator',
         logLabel: 'MBA super administrator',
+      });
+    }
+    if (context.key === BBA_DB_KEY) {
+      await ensureAdmin(User, {
+        email: env.BBA_SUPER_ADMIN_EMAIL,
+        password: env.BBA_SUPER_ADMIN_PASSWORD,
+        name: 'BBA Super Administrator',
+        logLabel: 'BBA super administrator',
       });
     }
   }

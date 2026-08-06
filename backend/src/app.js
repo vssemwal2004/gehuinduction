@@ -12,6 +12,7 @@ import studentQrDataRoutes from './routes/studentQrDataRoutes.js';
 import coordinatorRoutes from './routes/coordinatorRoutes.js';
 import scanRoutes from './routes/scanRoutes.js';
 import operationsRoutes from './routes/operationsRoutes.js';
+import emailTemplateRoutes from './routes/emailTemplateRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import studentAuthRoutes from './routes/studentAuthRoutes.js';
 import { activityLogger } from './middleware/activityLogger.js';
@@ -39,6 +40,7 @@ export function createApp() {
   app.use('/api/coordinators', coordinatorRoutes);
   app.use('/api/scans', scanRoutes);
   app.use('/api/operations', operationsRoutes);
+  app.use('/api/email-template', emailTemplateRoutes);
   app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
   app.use((err, _req, res, _next) => {
     const statusCode = err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError'

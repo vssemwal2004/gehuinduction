@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { env } from './env.js';
 import { activityLogSchema } from '../models/ActivityLog.js';
 import { groupSchema } from '../models/Group.js';
+import { emailTemplateSettingSchema } from '../models/EmailTemplateSetting.js';
 import { importJobSchema } from '../models/ImportJob.js';
 import { mailJobSchema } from '../models/MailJob.js';
 import { scanEventSchema } from '../models/ScanEvent.js';
@@ -12,9 +13,11 @@ import { userSchema } from '../models/User.js';
 export const PRIMARY_DB_KEY = 'primary';
 export const SECONDARY_DB_KEY = 'secondary';
 export const MBA_DB_KEY = 'mba';
+export const BBA_DB_KEY = 'bba';
 
 const modelSchemas = {
   ActivityLog: activityLogSchema,
+  EmailTemplateSetting: emailTemplateSettingSchema,
   Group: groupSchema,
   ImportJob: importJobSchema,
   MailJob: mailJobSchema,
@@ -47,6 +50,14 @@ function configuredDatabases() {
       uri: env.MONGODB_MBA_URI,
       dbName: env.MONGODB_MBA_DB_NAME,
       label: 'mba',
+    });
+  }
+  if (env.MONGODB_BBA_URI) {
+    configs.push({
+      key: BBA_DB_KEY,
+      uri: env.MONGODB_BBA_URI,
+      dbName: env.MONGODB_BBA_DB_NAME,
+      label: 'bba',
     });
   }
   return configs;

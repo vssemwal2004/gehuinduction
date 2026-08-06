@@ -1,22 +1,7 @@
-import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
 import { getActiveDatabaseContexts } from '../config/database.js';
 import { decryptCredentialPayload } from './credentialService.js';
-
-const transport = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  secure: env.SMTP_SECURE,
-  auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-  pool: true,
-  maxConnections: 2,
-  maxMessages: 50,
-  rateDelta: 1000,
-  rateLimit: 3,
-  connectionTimeout: 15_000,
-  greetingTimeout: 15_000,
-  socketTimeout: 30_000,
-});
+import { mailFrom, renderScanEmail } from './emailTemplateService.js';
+import { transport } from './mailTransport.js';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -35,11 +20,7 @@ async function contentFor(job, models) {
     .populate('groupCoordinatorId', 'name mobile')
     .lean();
   if (!student) throw new Error('Student no longer exists');
-  const group = student.groupIds?.[0];
-  return {
-    subject: 'GEU Induction Programme 2026 — Registration details',
-    html: `<p>Hello ${escapeHtml(student.name)},</p><p>Your induction registration has been confirmed.</p><p><strong>Group:</strong> ${escapeHtml(group?.name || group?.code || 'Not assigned')}<br><strong>Group coordinator:</strong> ${escapeHtml(student.groupCoordinatorName || student.groupCoordinatorId?.name || 'Not assigned')}<br><strong>Coordinator contact:</strong> ${escapeHtml(student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || 'Not available')}</p>${group?.whatsappLink ? `<p><a href="${escapeHtml(group.whatsappLink)}">Join your WhatsApp group</a></p>` : ''}<p>Regards,<br>GEU Induction Programme 2026</p>`,
-  };
+  return renderScanEmail(models, student);
 }
 
 async function processOne(models) {
@@ -52,7 +33,7 @@ async function processOne(models) {
   if (!job) return false;
   try {
     const content = await contentFor(job, models);
-    await transport.sendMail({ from: env.MAIL_FROM, to: job.to, ...content });
+    await transport.sendMail({ from: mailFrom(), to: job.to, ...content });
     if (job.type === 'coordinator_credentials' && job.activatePasswordHash && job.credentialUserId) {
       await models.User.updateOne({ _id: job.credentialUserId, isActive: true }, { $set: { passwordHash: job.activatePasswordHash } });
     }
