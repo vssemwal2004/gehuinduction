@@ -4,13 +4,18 @@ import { getActiveDatabaseContexts, getDatabaseContext, getRequestModels } from 
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
 import { createStudentQrCard, createStudentQrImage, createStudentQrTemplateSvg } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
+import { getEmailTemplateSetting } from '../services/emailTemplateService.js';
 import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
 import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
-const TEMPLATE_ROWS = [
+const DEFAULT_TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
   ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
+];
+const CUSTOM_TEMPLATE_ROWS = [
+  ['Student Name', 'Student ID', 'Email'],
+  ['Example Student', 'GEU2026001', 'student@example.com'],
 ];
 const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
@@ -53,8 +58,14 @@ function publicQrUrl(tokenHash) {
   return `${QR_LINK_BASE}${encodeURIComponent(String(tokenHash).trim().toLowerCase())}`;
 }
 
-export function downloadStudentTemplate(_req, res) {
-  const workbook = createSimpleXlsx(TEMPLATE_ROWS, 'Student Import');
+async function studentImportOptions(req) {
+  const setting = await getEmailTemplateSetting(getRequestModels(req));
+  return { requireGroupDetails: setting.useDefault !== false };
+}
+
+export async function downloadStudentTemplate(req, res) {
+  const options = await studentImportOptions(req);
+  const workbook = createSimpleXlsx(options.requireGroupDetails ? DEFAULT_TEMPLATE_ROWS : CUSTOM_TEMPLATE_ROWS, 'Student Import');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="geu-student-import-template.xlsx"');
   res.send(workbook);
@@ -62,7 +73,7 @@ export function downloadStudentTemplate(_req, res) {
 
 export async function previewStudentImport(req, res) {
   try {
-    const result = await validateStudentImport(req.file, getRequestModels(req));
+    const result = await validateStudentImport(req.file, getRequestModels(req), await studentImportOptions(req));
     res.json(result);
   } catch (error) {
     throw new HttpError(400, error.message);
@@ -73,7 +84,7 @@ export async function commitStudentImport(req, res) {
   const { ImportJob, Student } = getRequestModels(req);
   let result;
   try {
-    result = await validateStudentImport(req.file, getRequestModels(req));
+    result = await validateStudentImport(req.file, getRequestModels(req), await studentImportOptions(req));
   } catch (error) {
     throw new HttpError(400, error.message);
   }
@@ -95,7 +106,7 @@ export async function commitStudentImport(req, res) {
       name: row.name,
       studentId: row.studentId,
       email: row.email,
-      groupIds: [row.groupId],
+      groupIds: row.groupId ? [row.groupId] : [],
       groupCoordinatorName: row.groupCoordinatorName,
       groupCoordinatorMobile: row.groupCoordinatorMobile,
       qrTokenHash: qr.tokenHash,

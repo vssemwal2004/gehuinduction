@@ -33,7 +33,7 @@ const upload = multer({
 const importLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
 const qrPackageLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
 router.use(requireAuth, requireRole('admin'));
-router.get('/import/template', downloadStudentTemplate);
+router.get('/import/template', asyncHandler(downloadStudentTemplate));
 router.post('/import/preview', importLimiter, upload.single('file'), asyncHandler(previewStudentImport));
 router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler(commitStudentImport));
 router.get('/import/history', asyncHandler(listImportHistory));

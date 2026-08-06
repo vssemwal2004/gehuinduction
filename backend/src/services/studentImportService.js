@@ -2,7 +2,9 @@ import { parse } from 'csv-parse/sync';
 import { getModels } from '../config/database.js';
 import { parseSimpleXlsx } from '../utils/xlsx.js';
 
-const HEADERS = ['student name', 'student id', 'email', 'group code', 'group coordinator name', 'group coordinator mobile'];
+const BASE_HEADERS = ['student name', 'student id', 'email'];
+const GROUP_HEADERS = ['group code', 'group coordinator name', 'group coordinator mobile'];
+const HEADERS = [...BASE_HEADERS, ...GROUP_HEADERS];
 
 function normalize(value) {
   return String(value ?? '').trim();
@@ -17,16 +19,21 @@ function parseRows(file) {
   throw new Error('Upload an .xlsx or .csv file');
 }
 
-export async function validateStudentImport(file, models = getModels()) {
+export async function validateStudentImport(file, models = getModels(), options = {}) {
   const { Group, Student } = models;
+  const requireGroupDetails = options.requireGroupDetails !== false;
   if (!file) throw new Error('Select a student import file');
   const rows = parseRows(file);
   if (rows.length < 2) throw new Error('The file does not contain student rows');
   if (rows.length > 5001) throw new Error('A maximum of 5,000 student rows can be imported at once');
 
   const headers = rows[0].map((value) => normalize(value).toLowerCase());
-  if (HEADERS.some((header, index) => headers[index] !== header)) {
-    throw new Error(`Use the provided template. Required columns: ${HEADERS.join(', ')}`);
+  const requiredHeaders = requireGroupDetails ? HEADERS : BASE_HEADERS;
+  if (requiredHeaders.some((header, index) => headers[index] !== header)) {
+    throw new Error(`Use the provided template. Required columns: ${requiredHeaders.join(', ')}`);
+  }
+  if (!requireGroupDetails && headers.length >= HEADERS.length && GROUP_HEADERS.some((header, index) => headers[index + BASE_HEADERS.length] !== header)) {
+    throw new Error(`Optional group columns must be: ${GROUP_HEADERS.join(', ')}`);
   }
 
   const dataRows = rows.slice(1).map((row, index) => ({
@@ -60,10 +67,12 @@ export async function validateStudentImport(file, models = getModels()) {
     if (row.name.length < 2) errors.push('Student name is required');
     if (!/^[A-Za-z0-9_/-]{2,60}$/.test(row.studentId)) errors.push('Student ID is invalid');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) errors.push('Email is invalid');
-    if (!row.groupCode) errors.push('Group code is required');
-    else if (!groupMap.has(row.groupCode)) errors.push(`Group ${row.groupCode} does not exist or is inactive`);
-    if (row.groupCoordinatorName.length < 2) errors.push('Group coordinator name is required');
-    if (!/^[+0-9 ()-]{7,30}$/.test(row.groupCoordinatorMobile)) errors.push('Group coordinator mobile is invalid');
+    if (requireGroupDetails && !row.groupCode) errors.push('Group code is required');
+    if (row.groupCode && !groupMap.has(row.groupCode)) errors.push(`Group ${row.groupCode} does not exist or is inactive`);
+    if (requireGroupDetails && row.groupCoordinatorName.length < 2) errors.push('Group coordinator name is required');
+    if (!requireGroupDetails && row.groupCoordinatorName && row.groupCoordinatorName.length < 2) errors.push('Group coordinator name is invalid');
+    if (requireGroupDetails && !/^[+0-9 ()-]{7,30}$/.test(row.groupCoordinatorMobile)) errors.push('Group coordinator mobile is invalid');
+    if (!requireGroupDetails && row.groupCoordinatorMobile && !/^[+0-9 ()-]{7,30}$/.test(row.groupCoordinatorMobile)) errors.push('Group coordinator mobile is invalid');
     if (existingIds.has(row.studentId)) errors.push('Student ID already exists');
     if (existingEmails.has(row.email)) errors.push('Email already exists');
     if (fileIds.has(row.studentId)) errors.push('Duplicate student ID in file');
