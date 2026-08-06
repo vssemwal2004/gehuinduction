@@ -6,7 +6,7 @@ export const studentInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
   studentId: z.string().trim().min(2).max(60).regex(/^[A-Za-z0-9_/-]+$/, 'Student ID contains unsupported characters'),
   email: z.string().trim().email().max(180),
-  groupIds: z.array(objectId).min(1, 'Select at least one group').max(10),
-  groupCoordinatorName: z.string().trim().min(2).max(120),
-  groupCoordinatorMobile: z.string().trim().min(7).max(30).regex(/^[+0-9 ()-]+$/, 'Enter a valid coordinator mobile number'),
+  groupIds: z.array(objectId).max(10).default([]),
+  groupCoordinatorName: z.string().trim().max(120).default(''),
+  groupCoordinatorMobile: z.string().trim().max(30).default(''),
 });
