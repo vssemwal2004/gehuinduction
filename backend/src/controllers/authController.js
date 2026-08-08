@@ -17,6 +17,8 @@ function publicUser(user) {
     mobile: user.mobile || '',
     role: user.role,
     dbKey: user.dbKey,
+    permissions: user.permissions || [],
+    hasFullAdminAccess: user.isSuperAdmin === true,
     isSuperAdmin: isSuperAdmin(user),
   };
 }

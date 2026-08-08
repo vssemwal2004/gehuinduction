@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Database, LayoutDashboard, LogOut, QrCode, Settings, UserRound, Users } from 'lucide-react';
+import { Activity, Database, LayoutDashboard, LogOut, QrCode, Settings, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { api } from './lib/api';
 import LoginPage from './pages/LoginPage';
@@ -11,19 +11,30 @@ import CoordinatorsPage from './pages/CoordinatorsPage';
 import ScannerPage from './pages/ScannerPage';
 import OperationsPage from './pages/OperationsPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminsPage from './pages/AdminsPage';
 
 const fullAccessNavItems = [
-  ['Dashboard', LayoutDashboard],
-  ['Students', Users],
-  ['Student QR Data', Database],
-  ['Coordinators', UserRound],
-  ['Groups & WhatsApp', QrCode],
-  ['Activity Logs', Activity],
-  ['Settings', Settings],
+  ['Dashboard', LayoutDashboard, null],
+  ['Admins', ShieldCheck, 'admins'],
+  ['Students', Users, 'students'],
+  ['Student QR Data', Database, 'studentQrData'],
+  ['Coordinators', UserRound, 'coordinators'],
+  ['Groups & WhatsApp', QrCode, 'groups'],
+  ['Activity Logs', Activity, 'activityLogs'],
+  ['Settings', Settings, 'settings'],
 ];
 
-const limitedNavItems = fullAccessNavItems.filter(([label]) => ['Dashboard', 'Students'].includes(label));
-const SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
+function navItemsForUser(user, hasFullAccess) {
+  if (hasFullAccess) return fullAccessNavItems;
+  const permissions = user.permissions || [];
+  return fullAccessNavItems.filter(([, , permission]) => !permission || permissions.includes(permission));
+}
+const SUPER_ADMIN_EMAILS = [
+  'akhilnegi.cc@geu.ac.in',
+  '422semwalvivek@gmail.com',
+  'hod.btechfirstyear@gehu.ac.in',
+  'simarkatiyar@gehu.ac.in',
+];
 
 function LoadingScreen() {
   return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading…</div>;
@@ -44,8 +55,9 @@ function AdminDashboard() {
   const [error, setError] = useState('');
   const [showFailedEmails, setShowFailedEmails] = useState(false);
   const [studentStatus, setStudentStatus] = useState('');
-  const hasFullAccess = user.isSuperAdmin === true || user.email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-  const navItems = hasFullAccess ? fullAccessNavItems : limitedNavItems;
+  const hasFullAccess = user.isSuperAdmin === true || SUPER_ADMIN_EMAILS.includes(user.email?.trim().toLowerCase());
+  const navItems = navItemsForUser(user, hasFullAccess);
+  const canAccess = (permission) => hasFullAccess || user.permissions?.includes(permission);
 
   useEffect(() => {
     api('/dashboard/admin').then(setDashboard).catch((requestError) => setError(requestError.message));
@@ -60,17 +72,17 @@ function AdminDashboard() {
     </aside>
     <main className="min-w-0 lg:pl-60">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4 lg:px-8"><div className="flex min-w-0 items-center justify-between gap-3"><div className="min-w-0 flex-1 lg:hidden"><div className="truncate text-sm font-bold text-blue-700">GEU Induction Connect</div><select value={activePage} onChange={(e) => { setShowFailedEmails(false); setStudentStatus(''); setActivePage(e.target.value); }} className="mt-1 h-9 w-full max-w-[220px] rounded-md border border-slate-300 px-2 text-xs">{navItems.map(([label]) => <option key={label}>{label}</option>)}</select></div><div className="hidden lg:block"><div className="text-sm font-semibold text-slate-900">{activePage}</div><p className="mt-1 text-xs text-slate-500">GEU Induction Programme 2026</p></div><div className="min-w-0 max-w-[42%] text-right sm:max-w-xs"><div className="truncate text-sm font-semibold">{user.name}</div><div className="hidden truncate text-xs text-slate-500 sm:block">{user.email}</div></div></div></header>
-      {activePage === 'Groups & WhatsApp' ? <div className="p-4 sm:p-6 xl:p-8"><GroupsPage/></div> : activePage === 'Students' ? <div className="p-4 sm:p-6 xl:p-8"><StudentsPage key={studentStatus || 'all-students'} initialStatus={studentStatus}/></div> : activePage === 'Student QR Data' ? <div className="p-4 sm:p-6 xl:p-8"><StudentQrDataPage/></div> : activePage === 'Coordinators' ? <div className="p-4 sm:p-6 xl:p-8"><CoordinatorsPage/></div> : activePage === 'Activity Logs' ? <div className="p-4 sm:p-6 xl:p-8"><OperationsPage key={showFailedEmails ? 'failed-mail' : 'activity'} initialTab={showFailedEmails ? 'mail' : 'activity'} initialStatus={showFailedEmails ? 'failed' : ''}/></div> : activePage === 'Settings' ? <div className="p-4 sm:p-6 xl:p-8"><SettingsPage/></div> : <div className="space-y-5 p-4 sm:p-6 xl:p-8">
+      {activePage === 'Admins' ? <div className="p-4 sm:p-6 xl:p-8"><AdminsPage/></div> : activePage === 'Groups & WhatsApp' ? <div className="p-4 sm:p-6 xl:p-8"><GroupsPage/></div> : activePage === 'Students' ? <div className="p-4 sm:p-6 xl:p-8"><StudentsPage key={studentStatus || 'all-students'} initialStatus={studentStatus}/></div> : activePage === 'Student QR Data' ? <div className="p-4 sm:p-6 xl:p-8"><StudentQrDataPage/></div> : activePage === 'Coordinators' ? <div className="p-4 sm:p-6 xl:p-8"><CoordinatorsPage/></div> : activePage === 'Activity Logs' ? <div className="p-4 sm:p-6 xl:p-8"><OperationsPage key={showFailedEmails ? 'failed-mail' : 'activity'} initialTab={showFailedEmails ? 'mail' : 'activity'} initialStatus={showFailedEmails ? 'failed' : ''}/></div> : activePage === 'Settings' ? <div className="p-4 sm:p-6 xl:p-8"><SettingsPage/></div> : <div className="space-y-5 p-4 sm:p-6 xl:p-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <Stat label="Total students" value={counts.totalStudents ?? '—'}/>
           <Stat label="Registered students" value={counts.registeredStudents ?? '—'} tone="green"/>
-          <Stat label="Pending registration" value={counts.pendingStudents ?? '—'} tone="amber" actionLabel="View and download students" onClick={() => { setStudentStatus('not_registered'); setActivePage('Students'); }}/>
+          <Stat label="Pending registration" value={counts.pendingStudents ?? '—'} tone="amber" actionLabel="View and download students" onClick={canAccess('students') ? () => { setStudentStatus('not_registered'); setActivePage('Students'); } : undefined}/>
           <Stat label="Total groups" value={counts.totalGroups ?? '—'}/>
           <Stat label="Group coordinators" value={counts.groupCoordinators ?? '—'}/>
           <Stat label="Scan coordinators" value={counts.scanCoordinators ?? '—'}/>
           <Stat label="Scans today" value={counts.scansToday ?? '—'}/>
-          <Stat label="Failed emails" value={counts.failedEmails ?? '—'} tone="red" actionLabel="View failed emails" onClick={hasFullAccess ? () => { setShowFailedEmails(true); setActivePage('Activity Logs'); } : undefined}/>
+          <Stat label="Failed emails" value={counts.failedEmails ?? '—'} tone="red" actionLabel="View failed emails" onClick={canAccess('activityLogs') ? () => { setShowFailedEmails(true); setActivePage('Activity Logs'); } : undefined}/>
         </section>
         <section className="grid gap-4 xl:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Registration overview</h2><span className="text-sm font-semibold text-blue-700">{dashboard?.registrationPercent ?? 0}%</span></div><p className="mt-2 text-xs text-slate-500">Current QR registration completion.</p><div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${dashboard?.registrationPercent ?? 0}%` }}/></div></div>

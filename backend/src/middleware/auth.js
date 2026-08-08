@@ -1,22 +1,13 @@
-import { env } from '../config/env.js';
-import { BBA_DB_KEY, getModels, hasDatabaseContext, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
+import { getModels, hasDatabaseContext, PRIMARY_DB_KEY } from '../config/database.js';
+import { isSuperAdminEmail } from '../config/superAdmins.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 import { HttpError } from '../utils/httpError.js';
 
-const FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
-
 export function isSuperAdmin(user) {
   const dbKey = user?.dbKey || PRIMARY_DB_KEY;
-  const configuredEmail = {
-    [PRIMARY_DB_KEY]: env.PRIMARY_SUPER_ADMIN_EMAIL || FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL,
-    [SECONDARY_DB_KEY]: env.SECONDARY_SUPER_ADMIN_EMAIL,
-    [MBA_DB_KEY]: env.MBA_SUPER_ADMIN_EMAIL,
-    [BBA_DB_KEY]: env.BBA_SUPER_ADMIN_EMAIL,
-  }[dbKey];
   return Boolean(
-    configuredEmail
-      && user?.role === 'admin'
-      && user?.email?.trim().toLowerCase() === configuredEmail.trim().toLowerCase(),
+    user?.role === 'admin'
+      && (user?.isSuperAdmin === true || isSuperAdminEmail(user?.email, dbKey)),
   );
 }
 
@@ -28,7 +19,7 @@ export async function requireAuth(req, _res, next) {
   const dbKey = payload.dbKey || PRIMARY_DB_KEY;
   if (!hasDatabaseContext(dbKey)) throw new HttpError(401, 'Account database is unavailable');
   const { User } = getModels(dbKey);
-  const user = await User.findById(payload.sub).select('name email mobile role isActive groupIds').lean();
+  const user = await User.findById(payload.sub).select('name email mobile role isSuperAdmin permissions isActive groupIds').lean();
   if (!user || !user.isActive) throw new HttpError(401, 'Account is unavailable');
   req.dbKey = dbKey;
   req.models = getModels(dbKey);
@@ -46,4 +37,11 @@ export function requireRole(...roles) {
 export function requireSuperAdmin(req, _res, next) {
   if (!isSuperAdmin(req.user)) throw new HttpError(403, 'Super administrator access required');
   next();
+}
+
+export function requireAdminPermission(permission) {
+  return (req, _res, next) => {
+    if (isSuperAdmin(req.user) || req.user?.permissions?.includes(permission)) return next();
+    throw new HttpError(403, 'Admin feature access required');
+  };
 }

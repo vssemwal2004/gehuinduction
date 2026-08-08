@@ -13,6 +13,7 @@ import coordinatorRoutes from './routes/coordinatorRoutes.js';
 import scanRoutes from './routes/scanRoutes.js';
 import operationsRoutes from './routes/operationsRoutes.js';
 import emailTemplateRoutes from './routes/emailTemplateRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import studentAuthRoutes from './routes/studentAuthRoutes.js';
 import { activityLogger } from './middleware/activityLogger.js';
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/api/students', studentRoutes);
   app.use('/api/student-qr-data', studentQrDataRoutes);
   app.use('/api/coordinators', coordinatorRoutes);
+  app.use('/api/admins', adminRoutes);
   app.use('/api/scans', scanRoutes);
   app.use('/api/operations', operationsRoutes);
   app.use('/api/email-template', emailTemplateRoutes);

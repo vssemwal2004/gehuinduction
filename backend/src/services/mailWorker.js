@@ -17,7 +17,7 @@ async function contentFor(job, models) {
   if (job.type === 'coordinator_credentials') {
     const data = decryptCredentialPayload(job.payloadEncrypted);
     return {
-      subject: 'GEU Induction Connect 2026 — Coordinator access',
+      subject: 'GEU Induction Connect 2026 — Account access',
       html: `<p>Hello ${escapeHtml(data.name)},</p><p>Your account is ready.</p><p><strong>Role:</strong> ${escapeHtml(roleLabel(data.role))}<br><strong>Email:</strong> ${escapeHtml(data.email)}<br><strong>Temporary password:</strong> ${escapeHtml(data.password)}</p><p>Please keep these credentials private.</p>`,
     };
   }

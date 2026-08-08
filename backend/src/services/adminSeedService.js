@@ -1,9 +1,8 @@
 import { env } from '../config/env.js';
 import { BBA_DB_KEY, getActiveDatabaseContexts, MBA_DB_KEY, PRIMARY_DB_KEY, SECONDARY_DB_KEY } from '../config/database.js';
+import { getSuperAdminEmails } from '../config/superAdmins.js';
 
-const FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL = 'akhilnegi.cc@geu.ac.in';
-
-async function ensureAdmin(User, { email, password, name, logLabel }) {
+async function ensureAdmin(User, { email, password, name, logLabel, superAdmin = false }) {
   if (!email || !password) return;
   const normalizedEmail = email.toLowerCase();
   const existingAdmin = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
@@ -11,6 +10,14 @@ async function ensureAdmin(User, { email, password, name, logLabel }) {
     let changed = false;
     if (existingAdmin.role !== 'admin') {
       existingAdmin.role = 'admin';
+      changed = true;
+    }
+    if (existingAdmin.isSuperAdmin !== superAdmin) {
+      existingAdmin.isSuperAdmin = superAdmin;
+      changed = true;
+    }
+    if (superAdmin && existingAdmin.permissions?.length) {
+      existingAdmin.permissions = [];
       changed = true;
     }
     if (!existingAdmin.isActive) {
@@ -33,6 +40,8 @@ async function ensureAdmin(User, { email, password, name, logLabel }) {
     email: normalizedEmail,
     passwordHash: await User.hashPassword(password),
     role: 'admin',
+    isSuperAdmin: superAdmin,
+    permissions: [],
     isActive: true,
   });
   console.log(`${logLabel} created`);
@@ -48,12 +57,15 @@ export async function ensureInitialAdmin() {
         name: 'System Administrator',
         logLabel: 'Initial primary administrator',
       });
-      await ensureAdmin(User, {
-        email: env.PRIMARY_SUPER_ADMIN_EMAIL || FALLBACK_PRIMARY_SUPER_ADMIN_EMAIL,
-        password: env.PRIMARY_SUPER_ADMIN_PASSWORD || env.ADMIN_PASSWORD,
-        name: 'Primary Super Administrator',
-        logLabel: 'Primary super administrator',
-      });
+      for (const email of getSuperAdminEmails(PRIMARY_DB_KEY)) {
+        await ensureAdmin(User, {
+          email,
+          password: env.PRIMARY_SUPER_ADMIN_PASSWORD || env.ADMIN_PASSWORD,
+          name: 'Primary Super Administrator',
+          logLabel: `Primary super administrator ${email}`,
+          superAdmin: true,
+        });
+      }
     }
     if (context.key === SECONDARY_DB_KEY) {
       await ensureAdmin(User, {
@@ -61,6 +73,7 @@ export async function ensureInitialAdmin() {
         password: env.SECONDARY_SUPER_ADMIN_PASSWORD,
         name: 'Secondary Super Administrator',
         logLabel: 'Secondary super administrator',
+        superAdmin: true,
       });
     }
     if (context.key === MBA_DB_KEY) {
@@ -69,6 +82,7 @@ export async function ensureInitialAdmin() {
         password: env.MBA_SUPER_ADMIN_PASSWORD,
         name: 'MBA Super Administrator',
         logLabel: 'MBA super administrator',
+        superAdmin: true,
       });
     }
     if (context.key === BBA_DB_KEY) {
@@ -77,6 +91,7 @@ export async function ensureInitialAdmin() {
         password: env.BBA_SUPER_ADMIN_PASSWORD,
         name: 'BBA Super Administrator',
         logLabel: 'BBA super administrator',
+        superAdmin: true,
       });
     }
   }

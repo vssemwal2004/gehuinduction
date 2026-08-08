@@ -8,7 +8,7 @@ import {
   reactivateStudent,
   updateStudent,
 } from '../controllers/studentController.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAdminPermission, requireAuth, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
@@ -33,7 +33,7 @@ const upload = multer({
 });
 const importLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false });
 const qrPackageLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
-router.use(requireAuth, requireRole('admin'));
+router.use(requireAuth, requireRole('admin'), requireAdminPermission('students'));
 router.get('/import/template', asyncHandler(downloadStudentTemplate));
 router.post('/import/preview', importLimiter, upload.single('file'), asyncHandler(previewStudentImport));
 router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler(commitStudentImport));

@@ -9,6 +9,8 @@ export const userSchema = new mongoose.Schema({
   mobile: { type: String, trim: true, maxlength: 30 },
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: USER_ROLES, required: true, index: true },
+  isSuperAdmin: { type: Boolean, default: false, index: true },
+  permissions: [{ type: String, trim: true }],
   groupIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group' }],
   isActive: { type: Boolean, default: true, index: true },
   lastLoginAt: Date,
