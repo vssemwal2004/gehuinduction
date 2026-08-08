@@ -8,8 +8,8 @@ import jpeg from 'jpeg-js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.resolve(__dirname, '../../../frontend/src/img/123.png');
 // The template is 1024 × 1536. Keep the generated code inside the printed
-// red scanner frame, below the “SCAN ME” label, without covering its border.
-const qrBox = { x: 257, y: 550, size: 510 };
+// scanner frame, below the "SCAN ME" label, without covering its border.
+const qrBox = { x: 252, y: 680, size: 520 };
 
 let cachedTemplate;
 let cachedTemplateSource;

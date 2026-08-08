@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(configDir, '../../.env'), quiet: true, override: true });
+dotenv.config({ path: path.resolve(configDir, '../.env'), quiet: true, override: false });
 
 const optionalTrimmed = (schema) => z.preprocess((value) => {
   if (typeof value !== 'string') return value;
