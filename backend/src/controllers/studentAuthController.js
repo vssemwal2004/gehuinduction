@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 import { isMsg91OtpConfigured, sendMsg91Otp, toMsg91Mobile } from '../services/msg91OtpService.js';
 import { HttpError } from '../utils/httpError.js';
 
-const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_TTL_MS = env.MSG91_OTP_VALIDITY_MINUTES * 60 * 1000;
 const otpStore = new Map();
 const phoneSendHoldStore = new Map();
 const phoneVerifyStore = new Map();

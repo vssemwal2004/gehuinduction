@@ -45,7 +45,6 @@ const schema = z.object({
   SMTP_PASS: z.string().min(1),
   MAIL_FROM: z.string().email(),
   MSG91_AUTHKEY: z.string().trim().optional(),
-  MSG91_OTP_TEMPLATE_ID: z.string().trim().optional(),
   MSG91_SMS_TEMPLATE_ID: z.string().trim().optional(),
   MSG91_OTP_VALIDITY_MINUTES: z.coerce.number().int().positive().default(5),
   MSG91_DEFAULT_COUNTRY_CODE: z.string().trim().regex(/^\d{1,4}$/).default('91'),
@@ -55,8 +54,8 @@ const schema = z.object({
   STUDENT_OTP_VERIFY_LIMIT: z.coerce.number().int().positive().default(5),
   TRUST_PROXY: z.string().regex(/^(false|[1-9]\d*)$/).default('false').transform((value) => value === 'false' ? false : Number(value)),
 }).superRefine((value, context) => {
-  if (value.MSG91_AUTHKEY && !value.MSG91_OTP_TEMPLATE_ID && !value.MSG91_SMS_TEMPLATE_ID) {
-    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Configure MSG91_SMS_TEMPLATE_ID or MSG91_OTP_TEMPLATE_ID with MSG91_AUTHKEY' });
+  if (value.MSG91_AUTHKEY && !value.MSG91_SMS_TEMPLATE_ID) {
+    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Configure MSG91_SMS_TEMPLATE_ID with MSG91_AUTHKEY' });
   }
   if (value.NODE_ENV !== 'production') return;
   if (value.JWT_SECRET.length < 48 || /change|secret/i.test(value.JWT_SECRET)) {
@@ -99,8 +98,8 @@ const schema = z.object({
   if (!value.SMTP_SECURE) {
     context.addIssue({ code: 'custom', path: ['SMTP_SECURE'], message: 'Production SMTP connection must use TLS' });
   }
-  if (!value.MSG91_AUTHKEY || (!value.MSG91_OTP_TEMPLATE_ID && !value.MSG91_SMS_TEMPLATE_ID)) {
-    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Production student OTP login requires MSG91_AUTHKEY and a MSG91 template ID' });
+  if (!value.MSG91_AUTHKEY || !value.MSG91_SMS_TEMPLATE_ID) {
+    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Production student OTP login requires MSG91_AUTHKEY and MSG91_SMS_TEMPLATE_ID' });
   }
 });
 

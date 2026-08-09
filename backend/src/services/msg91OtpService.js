@@ -4,7 +4,7 @@ import { HttpError } from '../utils/httpError.js';
 const FLOW_URL = 'https://control.msg91.com/api/v5/flow';
 
 export function isMsg91OtpConfigured() {
-  return Boolean(env.MSG91_AUTHKEY && (env.MSG91_SMS_TEMPLATE_ID || env.MSG91_OTP_TEMPLATE_ID));
+  return Boolean(env.MSG91_AUTHKEY && env.MSG91_SMS_TEMPLATE_ID);
 }
 
 export function toMsg91Mobile(phone) {
@@ -19,13 +19,13 @@ function isSuccessResponse(data) {
 }
 
 export async function sendMsg91Otp(phone, otp) {
-  if (!isMsg91OtpConfigured()) throw new HttpError(500, 'MSG91 OTP is not configured');
+  if (!isMsg91OtpConfigured()) throw new HttpError(500, 'MSG91 SMS is not configured');
   const mobile = toMsg91Mobile(phone);
-  const templateId = env.MSG91_SMS_TEMPLATE_ID || env.MSG91_OTP_TEMPLATE_ID;
+  const templateId = env.MSG91_SMS_TEMPLATE_ID;
   const validity = String(env.MSG91_OTP_VALIDITY_MINUTES);
 
   if (env.NODE_ENV !== 'production') {
-    console.log('MSG91 SMS OTP request', { templateId, mobile, validity });
+    console.log('MSG91 SMS request', { templateId, mobile, validity });
   }
 
   const response = await fetch(FLOW_URL, {
@@ -43,13 +43,13 @@ export async function sendMsg91Otp(phone, otp) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !isSuccessResponse(data)) {
-    console.error('MSG91 SMS OTP failed', {
+    console.error('MSG91 SMS failed', {
       status: response.status,
       templateId,
       mobile,
       response: data,
     });
-    throw new HttpError(response.ok ? 502 : response.status, data?.message || 'MSG91 failed to send OTP');
+    throw new HttpError(response.ok ? 502 : response.status, data?.message || 'MSG91 failed to send SMS');
   }
   return data;
 }
