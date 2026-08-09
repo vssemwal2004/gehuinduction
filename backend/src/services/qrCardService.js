@@ -6,7 +6,11 @@ import QRCode from 'qrcode';
 import jpeg from 'jpeg-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const templatePath = path.resolve(__dirname, '../../../frontend/src/img/123.png');
+const templatePaths = [
+  process.env.QR_CARD_TEMPLATE_PATH,
+  path.resolve(__dirname, '../assets/qr-template.png'),
+  path.resolve(__dirname, '../../../frontend/src/img/123.png'),
+].filter(Boolean);
 // The template is 1024 × 1536. Keep the generated code inside the printed
 // scanner frame, below the "SCAN ME" label, without covering its border.
 const qrBox = { x: 252, y: 680, size: 520 };
@@ -17,7 +21,13 @@ let cachedCompactTemplateJpeg;
 let cachedCompactTemplateDataUri;
 
 export function getQrCardTemplate() {
-  if (!cachedTemplateSource) cachedTemplateSource = fs.readFileSync(templatePath);
+  if (!cachedTemplateSource) {
+    const templatePath = templatePaths.find((candidate) => fs.existsSync(candidate));
+    if (!templatePath) {
+      throw new Error(`QR card template not found. Checked: ${templatePaths.join(', ')}`);
+    }
+    cachedTemplateSource = fs.readFileSync(templatePath);
+  }
   return cachedTemplateSource;
 }
 

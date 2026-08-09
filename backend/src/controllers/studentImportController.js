@@ -43,10 +43,14 @@ async function ensureQrToken(Student, student) {
 
 async function ensureQrData(Student, student) {
   if (student.qrTokenEncrypted) {
-    const token = decryptQrToken(student.qrTokenEncrypted);
-    const tokenHash = student.qrTokenHash || hashQrToken(token);
-    if (!student.qrTokenHash) await Student.updateOne({ _id: student._id }, { qrTokenHash: tokenHash });
-    return { token, tokenHash };
+    try {
+      const token = decryptQrToken(student.qrTokenEncrypted);
+      const tokenHash = student.qrTokenHash || hashQrToken(token);
+      if (!student.qrTokenHash) await Student.updateOne({ _id: student._id }, { qrTokenHash: tokenHash });
+      return { token, tokenHash };
+    } catch (error) {
+      console.warn(`Regenerating unreadable QR token for student ${student._id}: ${error.message}`);
+    }
   }
   const qr = createQrToken();
   await Student.updateOne({ _id: student._id }, { qrTokenHash: qr.tokenHash, qrTokenEncrypted: qr.tokenEncrypted, qrGeneratedAt: new Date() });
