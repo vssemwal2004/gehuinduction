@@ -13,6 +13,7 @@ const qrBox = { x: 252, y: 680, size: 520 };
 
 let cachedTemplate;
 let cachedTemplateSource;
+let cachedCompactTemplateJpeg;
 let cachedCompactTemplateDataUri;
 
 export function getQrCardTemplate() {
@@ -59,8 +60,8 @@ export async function createStudentQrCard(token) {
   return PNG.sync.write(card);
 }
 
-function compactTemplateDataUri() {
-  if (cachedCompactTemplateDataUri) return cachedCompactTemplateDataUri;
+export function compactTemplateJpeg() {
+  if (cachedCompactTemplateJpeg) return cachedCompactTemplateJpeg;
   const source = template();
   const width = 512;
   const height = 768;
@@ -79,7 +80,13 @@ function compactTemplateDataUri() {
       }
     }
   }
-  const compressed = jpeg.encode({ data, width, height }, 70).data;
+  cachedCompactTemplateJpeg = jpeg.encode({ data, width, height }, 70).data;
+  return cachedCompactTemplateJpeg;
+}
+
+function compactTemplateDataUri() {
+  if (cachedCompactTemplateDataUri) return cachedCompactTemplateDataUri;
+  const compressed = compactTemplateJpeg();
   cachedCompactTemplateDataUri = `data:image/jpeg;base64,${compressed.toString('base64')}`;
   return cachedCompactTemplateDataUri;
 }
@@ -87,6 +94,10 @@ function compactTemplateDataUri() {
 // SVG is compact, resolution-independent and much faster to create than PNG.
 // It keeps a full-cohort ZIP in the MB range without blocking the API process.
 export async function createStudentQrTemplateSvg(token) {
+  return createStudentQrTemplateSvgWithBackground(token, compactTemplateDataUri());
+}
+
+export async function createStudentQrTemplateSvgWithBackground(token, backgroundHref) {
   const qr = await QRCode.toString(`GEUQR1:${token}`, {
     type: 'svg',
     errorCorrectionLevel: 'M',
@@ -95,8 +106,7 @@ export async function createStudentQrTemplateSvg(token) {
     color: { dark: '#000000', light: '#FFFFFF' },
   });
   const positionedQr = qr.replace('<svg ', `<svg x="${qrBox.x}" y="${qrBox.y}" `);
-  const background = compactTemplateDataUri();
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 1024 1536" role="img" aria-label="GEU student QR card">\n  <image href="${background}" x="0" y="0" width="1024" height="1536" preserveAspectRatio="none"/>\n  ${positionedQr}\n</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 1024 1536" role="img" aria-label="GEU student QR card">\n  <image href="${backgroundHref}" x="0" y="0" width="1024" height="1536" preserveAspectRatio="none"/>\n  ${positionedQr}\n</svg>`;
 }
 
 export function createStudentQrImage(token) {

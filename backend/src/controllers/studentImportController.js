@@ -2,7 +2,13 @@ import mongoose from 'mongoose';
 import { zipSync, strToU8 } from 'fflate';
 import { getActiveDatabaseContexts, getDatabaseContext, getRequestModels } from '../config/database.js';
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
-import { createStudentQrCard, createStudentQrImage, createStudentQrTemplateSvg } from '../services/qrCardService.js';
+import {
+  createStudentQrCard,
+  createStudentQrImage,
+  createStudentQrTemplateSvg,
+  createStudentQrTemplateSvgWithBackground,
+  getQrCardTemplate,
+} from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
 import { getEmailTemplateSetting } from '../services/emailTemplateService.js';
 import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
@@ -235,7 +241,9 @@ export async function downloadQrPackage(req, res) {
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
-  const files = {};
+  const files = {
+    'assets/qr-template.png': new Uint8Array(getQrCardTemplate()),
+  };
   const mappingRows = [['Student ID', 'Student Name', 'Email', 'Course', 'Group', 'QR Link', 'QR File Name']];
   const batchSize = 20;
   for (let index = 0; index < students.length; index += batchSize) {
@@ -243,7 +251,7 @@ export async function downloadQrPackage(req, res) {
     const generated = await Promise.all(batch.map(async (student) => {
       const qr = await ensureQrData(Student, student);
       const fileName = `${safeFileName(student.studentId)}.svg`;
-      const image = await createStudentQrTemplateSvg(qr.token);
+      const image = await createStudentQrTemplateSvgWithBackground(qr.token, '../assets/qr-template.png');
       return { student, fileName, image, tokenHash: qr.tokenHash };
     }));
     generated.forEach(({ student, fileName, image, tokenHash }) => {
@@ -252,7 +260,7 @@ export async function downloadQrPackage(req, res) {
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
-  files['README.txt'] = strToU8('GEU Induction Programme 2026\nEach student-ID-named SVG is a self-contained card with the compressed poster template and a sharply aligned vector QR. No external asset folder is required. SVG cards open in modern browsers and print at any size without losing QR quality. QR images contain secure opaque tokens only; student data is resolved by the authenticated scan coordinator application.');
+  files['README.txt'] = strToU8('GEU Induction Programme 2026\nEach student-ID-named SVG card uses the shared original-quality assets/qr-template.png background included in this ZIP and a sharply aligned vector QR. Keep the qr-codes and assets folders together when moving files. SVG cards open in modern browsers and print at any size without losing QR quality. QR images contain secure opaque tokens only; student data is resolved by the authenticated scan coordinator application.');
   const archive = Buffer.from(zipSync(files, { level: 6 }));
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-qr-package', req)}-${Date.now()}.zip"`);
