@@ -44,6 +44,7 @@ const schema = z.object({
   SMTP_USER: z.string().min(1),
   SMTP_PASS: z.string().min(1),
   MAIL_FROM: z.string().email(),
+  MAIL_FROM_NAME: optionalTrimmed(z.string().min(1)),
   MSG91_AUTHKEY: z.string().trim().optional(),
   MSG91_SMS_TEMPLATE_ID: z.string().trim().optional(),
   MSG91_OTP_VALIDITY_MINUTES: z.coerce.number().int().positive().default(5),

@@ -100,5 +100,6 @@ export function renderTemplatePreview(setting, data = sampleTemplateData()) {
 }
 
 export function mailFrom() {
-  return env.MAIL_FROM;
+  if (!env.MAIL_FROM_NAME) return env.MAIL_FROM;
+  return { name: env.MAIL_FROM_NAME, address: env.MAIL_FROM };
 }
