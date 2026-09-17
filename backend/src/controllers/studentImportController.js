@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 import { zipSync, strToU8 } from 'fflate';
 import { getActiveDatabaseContexts, getDatabaseContext, getRequestModels } from '../config/database.js';
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
 import {
   createStudentQrCard,
+  createStudentQrCardJpeg,
   createStudentQrImage,
   createStudentQrTemplateSvg,
 } from '../services/qrCardService.js';
@@ -16,7 +18,7 @@ const STUDENT_TEMPLATE_ROWS = [
   ['Student Name', 'Student ID', 'Student Mobile', 'Semester'],
   ['Example Student', 'GEU2026001', '+91 9999999999', '1'],
 ];
-const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
+const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech12/';
 
 function safeFileName(value) {
   return String(value).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
@@ -210,19 +212,22 @@ export async function downloadQrPackage(req, res) {
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
   const files = {};
-  const mappingRows = [['Student ID', 'Student Name', 'Mobile', 'Semester', 'QR Link', 'QR Image File']];
+  const mappingRows = [['Student ID', 'Student Name', 'Mobile', 'Semester', 'QR File Name', 'QR Link']];
   const batchSize = 6;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
       const qr = await ensureQrData(Student, student);
-      const fileName = `${safeFileName(student.studentId)}_${safeFileName(student.name)}.png`;
-      const image = await createStudentQrCard(qr.token);
-      return { student, fileName, image, tokenHash: qr.tokenHash };
+      const randomName = crypto.randomBytes(12).toString('hex');
+      const fileName = `${randomName}.jpg`;
+      const image = await createStudentQrCardJpeg(qr.token);
+      const qrLink = `${QR_LINK_BASE}${fileName}`;
+      await Student.updateOne({ _id: student._id }, { qrFileName: fileName });
+      return { student, fileName, image, qrLink };
     }));
-    generated.forEach(({ student, fileName, image, tokenHash }) => {
+    generated.forEach(({ student, fileName, image, qrLink }) => {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.mobile, student.semester, publicQrUrl(tokenHash), fileName]);
+      mappingRows.push([student.studentId, student.name, student.mobile, student.semester, fileName, qrLink]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));

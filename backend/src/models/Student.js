@@ -16,6 +16,8 @@ export const studentSchema = new mongoose.Schema({
   qrTokenHash: { type: String, required: true, unique: true, select: false },
   qrTokenEncrypted: { type: String, required: true, select: false },
   qrGeneratedAt: { type: Date, default: Date.now },
+  qrFileName: { type: String, trim: true, index: true },
+  qrLink: { type: String, trim: true },
   qrRevokedAt: Date,
   lastScannedAt: Date,
   scanCount: { type: Number, default: 0 },

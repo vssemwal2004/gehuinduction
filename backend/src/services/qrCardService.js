@@ -70,6 +70,11 @@ export async function createStudentQrCard(token) {
   return PNG.sync.write(card);
 }
 
+export async function createStudentQrCardJpeg(token) {
+  const png = PNG.sync.read(await createStudentQrCard(token));
+  return jpeg.encode({ data: png.data, width: png.width, height: png.height }, 88).data;
+}
+
 export function compactTemplateJpeg() {
   if (cachedCompactTemplateJpeg) return cachedCompactTemplateJpeg;
   const source = template();

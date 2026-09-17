@@ -16,6 +16,7 @@ import emailTemplateRoutes from './routes/emailTemplateRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import studentAuthRoutes from './routes/studentAuthRoutes.js';
+import studentDataRoutes from './routes/studentDataRoutes.js';
 import { activityLogger } from './middleware/activityLogger.js';
 import { requireTrustedOrigin } from './middleware/originGuard.js';
 
@@ -37,6 +38,7 @@ export function createApp() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/students', studentRoutes);
+  app.use('/api/student-data', studentDataRoutes);
   app.use('/api/student-qr-data', studentQrDataRoutes);
   app.use('/api/coordinators', coordinatorRoutes);
   app.use('/api/admins', adminRoutes);
