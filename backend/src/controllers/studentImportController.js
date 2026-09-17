@@ -8,26 +8,13 @@ import {
   createStudentQrTemplateSvg,
 } from '../services/qrCardService.js';
 import { validateStudentImport } from '../services/studentImportService.js';
-import { getEmailTemplateSetting } from '../services/emailTemplateService.js';
 import { createSimpleXlsx, createXlsxWithImages } from '../utils/xlsx.js';
 import { HttpError } from '../utils/httpError.js';
 import { studentFilterFromRequest } from '../utils/studentFilters.js';
 
-const DEFAULT_TEMPLATE_ROWS = [
-  ['Student Name', 'Student ID', 'Email', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
-  ['Example Student', 'GEU2026001', 'student@example.com', 'G1', 'Coordinator Name', '+91 9999999999'],
-];
-const CUSTOM_TEMPLATE_ROWS = [
-  ['Student Name', 'Student ID', 'Email'],
-  ['Example Student', 'GEU2026001', 'student@example.com'],
-];
-const DEFAULT_COURSE_TEMPLATE_ROWS = [
-  ['Student Name', 'Student ID', 'Email', 'Course', 'Group Code', 'Group Coordinator Name', 'Group Coordinator Mobile'],
-  ['Example Student', 'GEU2026001', 'student@example.com', 'BBA AI', 'G1', 'Coordinator Name', '+91 9999999999'],
-];
-const CUSTOM_COURSE_TEMPLATE_ROWS = [
-  ['Student Name', 'Student ID', 'Email', 'Course'],
-  ['Example Student', 'GEU2026001', 'student@example.com', 'BBA AI'],
+const STUDENT_TEMPLATE_ROWS = [
+  ['Student Name', 'Student ID', 'Student Mobile', 'Semester'],
+  ['Example Student', 'GEU2026001', '+91 9999999999', '1'],
 ];
 const QR_LINK_BASE = 'https://files.geu.ac.in/induction/btech/';
 
@@ -74,17 +61,8 @@ function publicQrUrl(tokenHash) {
   return `${QR_LINK_BASE}${encodeURIComponent(String(tokenHash).trim().toLowerCase())}`;
 }
 
-async function studentImportOptions(req) {
-  const setting = await getEmailTemplateSetting(getRequestModels(req));
-  return { requireGroupDetails: setting.useDefault !== false, requireCourse: setting.requireCourse === true };
-}
-
-export async function downloadStudentTemplate(req, res) {
-  const options = await studentImportOptions(req);
-  const rows = options.requireGroupDetails
-    ? (options.requireCourse ? DEFAULT_COURSE_TEMPLATE_ROWS : DEFAULT_TEMPLATE_ROWS)
-    : (options.requireCourse ? CUSTOM_COURSE_TEMPLATE_ROWS : CUSTOM_TEMPLATE_ROWS);
-  const workbook = createSimpleXlsx(rows, 'Student Import');
+export async function downloadStudentTemplate(_req, res) {
+  const workbook = createSimpleXlsx(STUDENT_TEMPLATE_ROWS, 'Student Import');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="geu-student-import-template.xlsx"');
   res.send(workbook);
@@ -92,7 +70,7 @@ export async function downloadStudentTemplate(req, res) {
 
 export async function previewStudentImport(req, res) {
   try {
-    const result = await validateStudentImport(req.file, getRequestModels(req), await studentImportOptions(req));
+    const result = await validateStudentImport(req.file, getRequestModels(req));
     res.json(result);
   } catch (error) {
     throw new HttpError(400, error.message);
@@ -103,7 +81,7 @@ export async function commitStudentImport(req, res) {
   const { ImportJob, Student } = getRequestModels(req);
   let result;
   try {
-    result = await validateStudentImport(req.file, getRequestModels(req), await studentImportOptions(req));
+    result = await validateStudentImport(req.file, getRequestModels(req));
   } catch (error) {
     throw new HttpError(400, error.message);
   }
@@ -124,11 +102,8 @@ export async function commitStudentImport(req, res) {
     return {
       name: row.name,
       studentId: row.studentId,
-      email: row.email,
-      course: row.course,
-      groupIds: row.groupId ? [row.groupId] : [],
-      groupCoordinatorName: row.groupCoordinatorName,
-      groupCoordinatorMobile: row.groupCoordinatorMobile,
+      mobile: row.mobile,
+      semester: row.semester,
       qrTokenHash: qr.tokenHash,
       qrTokenEncrypted: qr.tokenEncrypted,
     };
@@ -169,9 +144,7 @@ export async function listImportHistory(req, res) {
 export async function exportStudentsExcel(req, res) {
   const { Student } = getRequestModels(req);
   const students = await Student.find(studentFilterFromRequest(req))
-    .select('+qrTokenEncrypted +qrTokenHash name studentId email course groupIds groupCoordinatorName groupCoordinatorMobile groupCoordinatorId registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
-    .populate('groupIds', 'name code whatsappLink')
-    .populate('groupCoordinatorId', 'name mobile email')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId mobile semester registrationStatus qrGeneratedAt qrRevokedAt lastScannedAt scanCount isActive createdAt updatedAt')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No students found for this export');
@@ -180,11 +153,8 @@ export async function exportStudentsExcel(req, res) {
     [
       'Student Name',
       'Student ID',
-      'Email',
-      'Course',
-      'Groups',
-      'Group Coordinator',
-      'Coordinator Mobile',
+      'Mobile',
+      'Semester',
       'Registration Status',
       'Active',
       'Scan Count',
@@ -210,11 +180,8 @@ export async function exportStudentsExcel(req, res) {
     rows.push([
       student.name,
       student.studentId,
-      student.email,
-      student.course || '',
-      groupCodes(student),
-      student.groupCoordinatorName || student.groupCoordinatorId?.name || '',
-      student.groupCoordinatorMobile || student.groupCoordinatorId?.mobile || '',
+      student.mobile,
+      student.semester,
       student.registrationStatus,
       student.isActive ? 'Yes' : 'No',
       student.scanCount || 0,
@@ -237,14 +204,13 @@ export async function exportStudentsExcel(req, res) {
 export async function downloadQrPackage(req, res) {
   const { Student } = getRequestModels(req);
   const students = await Student.find({ ...studentFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
-    .select('+qrTokenEncrypted +qrTokenHash name studentId email course registrationStatus')
-    .populate('groupIds', 'name code')
+    .select('+qrTokenEncrypted +qrTokenHash name studentId mobile semester registrationStatus')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
 
   const files = {};
-  const mappingRows = [['Student ID', 'Student Name', 'Email', 'Course', 'Group', 'QR Link', 'QR Image File']];
+  const mappingRows = [['Student ID', 'Student Name', 'Mobile', 'Semester', 'QR Link', 'QR Image File']];
   const batchSize = 6;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
@@ -256,14 +222,14 @@ export async function downloadQrPackage(req, res) {
     }));
     generated.forEach(({ student, fileName, image, tokenHash }) => {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
-      mappingRows.push([student.studentId, student.name, student.email, student.course || '', groupCodes(student), publicQrUrl(tokenHash), fileName]);
+      mappingRows.push([student.studentId, student.name, student.mobile, student.semester, publicQrUrl(tokenHash), fileName]);
     });
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
-  files['README.txt'] = strToU8('GEU Induction Programme 2026\nEach student file is a complete PNG image with the GEHU induction template and the student QR already merged into the scan frame. The PNG files can be opened, shared and printed independently. QR images contain secure opaque tokens only; student data is resolved by the authenticated scan coordinator application.');
+  files['README.txt'] = strToU8('GEHU Freshers Gate Entry 2026\nEach student file is a complete gate-pass PNG with a secure one-time-entry QR merged into the pass template.');
   const archive = Buffer.from(zipSync(files, { level: 1 }));
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('geu-induction-qr-package', req)}-${Date.now()}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('gehu-gate-pass-package', req)}-${Date.now()}.zip"`);
   res.send(archive);
 }
 

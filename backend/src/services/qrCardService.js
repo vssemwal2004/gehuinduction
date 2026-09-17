@@ -8,12 +8,12 @@ import jpeg from 'jpeg-js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePaths = [
   process.env.QR_CARD_TEMPLATE_PATH,
-  path.resolve(__dirname, '../assets/qr-template.png'),
+  path.resolve(__dirname, '../assets/gate-pass-template.png'),
   path.resolve(__dirname, '../../../frontend/src/img/123.png'),
 ].filter(Boolean);
 // The template is 1024 × 1536. Keep the generated code inside the printed
 // scanner frame, below the "SCAN ME" label, without covering its border.
-const qrBox = { x: 252, y: 680, size: 520 };
+const qrBox = { x: 252, y: 635, size: 520 };
 
 let cachedTemplate;
 let cachedTemplateSource;

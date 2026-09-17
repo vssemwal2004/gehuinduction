@@ -96,12 +96,6 @@ const schema = z.object({
   if (value.BBA_SUPER_ADMIN_EMAIL && !value.BBA_SUPER_ADMIN_PASSWORD) {
     context.addIssue({ code: 'custom', path: ['BBA_SUPER_ADMIN_PASSWORD'], message: 'Configure BBA_SUPER_ADMIN_PASSWORD for the BBA database super administrator' });
   }
-  if (!value.SMTP_SECURE) {
-    context.addIssue({ code: 'custom', path: ['SMTP_SECURE'], message: 'Production SMTP connection must use TLS' });
-  }
-  if (!value.MSG91_AUTHKEY || !value.MSG91_SMS_TEMPLATE_ID) {
-    context.addIssue({ code: 'custom', path: ['MSG91_AUTHKEY'], message: 'Production student OTP login requires MSG91_AUTHKEY and MSG91_SMS_TEMPLATE_ID' });
-  }
 });
 
 const parsed = schema.safeParse(process.env);

@@ -15,7 +15,7 @@ export function studentFilterFromRequest(req) {
 
   if (search) {
     const pattern = new RegExp(escapeRegex(search), 'i');
-    query.$or = [{ name: pattern }, { studentId: pattern }, { email: pattern }];
+    query.$or = [{ name: pattern }, { studentId: pattern }, { mobile: pattern }, { semester: pattern }];
   }
   if (['not_registered', 'registered', 'inactive'].includes(status)) query.registrationStatus = status;
   if (groupId) {
