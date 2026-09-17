@@ -1,7 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
-const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false, trimValues: false });
+const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false, trimValues: false, removeNSPrefix: true });
 
 function array(value) {
   if (value === undefined || value === null) return [];

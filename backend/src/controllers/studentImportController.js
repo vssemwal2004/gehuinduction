@@ -5,7 +5,7 @@ import { getActiveDatabaseContexts, getDatabaseContext, getRequestModels } from 
 import { createQrToken, decryptQrToken, hashQrToken } from '../services/qrTokenService.js';
 import {
   createStudentQrCard,
-  createStudentQrCardJpeg,
+  createCompactStudentQrCardJpeg,
   createStudentQrImage,
   createStudentQrTemplateSvg,
 } from '../services/qrCardService.js';
@@ -203,24 +203,29 @@ export async function exportStudentsExcel(req, res) {
   res.send(workbook);
 }
 
-export async function downloadQrPackage(req, res) {
-  const { Student } = getRequestModels(req);
-  const students = await Student.find({ ...studentFilterFromRequest(req), isActive: true, qrRevokedAt: { $exists: false } })
+const qrPackageJobs = new Map();
+const jobForRequest = (req) => {
+  const job = qrPackageJobs.get(String(req.params.jobId));
+  if (!job || job.owner !== String(req.user._id)) throw new HttpError(404, 'QR package job not found');
+  return job;
+};
+
+async function buildQrArchive(Student, filter, updateProgress) {
+  const students = await Student.find({ ...filter, isActive: true, qrRevokedAt: { $exists: false } })
     .select('+qrTokenEncrypted +qrTokenHash name studentId mobile semester registrationStatus')
     .sort({ studentId: 1 })
     .lean();
   if (!students.length) throw new HttpError(404, 'No active student QR codes are available');
-
   const files = {};
   const mappingRows = [['Student ID', 'Student Name', 'Mobile', 'Semester', 'QR File Name', 'QR Link']];
-  const batchSize = 6;
+  const batchSize = 8;
   for (let index = 0; index < students.length; index += batchSize) {
     const batch = students.slice(index, index + batchSize);
     const generated = await Promise.all(batch.map(async (student) => {
       const qr = await ensureQrData(Student, student);
       const randomName = crypto.randomBytes(12).toString('hex');
       const fileName = `${randomName}.jpg`;
-      const image = await createStudentQrCardJpeg(qr.token);
+      const image = await createCompactStudentQrCardJpeg(qr.token);
       const qrLink = `${QR_LINK_BASE}${fileName}`;
       await Student.updateOne({ _id: student._id }, { qrFileName: fileName });
       return { student, fileName, image, qrLink };
@@ -229,14 +234,49 @@ export async function downloadQrPackage(req, res) {
       files[`qr-codes/${fileName}`] = new Uint8Array(image);
       mappingRows.push([student.studentId, student.name, student.mobile, student.semester, fileName, qrLink]);
     });
+    updateProgress(Math.min(94, Math.round(((index + generated.length) / students.length) * 94)), students.length);
+    await new Promise((resolve) => setImmediate(resolve));
   }
   files['students.xlsx'] = new Uint8Array(createSimpleXlsx(mappingRows, 'QR Mapping'));
-  files['README.txt'] = strToU8('GEHU Freshers Gate Entry 2026\nEach student file is a complete gate-pass PNG with a secure one-time-entry QR merged into the pass template.');
+  files['README.txt'] = strToU8('GEHU Freshers Gate Entry 2026\nEach JPG is a compact complete gate pass with a secure one-time-entry QR. Upload every JPG from qr-codes/ to https://files.geu.ac.in/induction/btech12/ without renaming it, then upload students.xlsx in Student Data Upload.');
+  updateProgress(96, students.length);
   const archive = Buffer.from(zipSync(files, { level: 1 }));
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${filteredExportName('gehu-gate-pass-package', req)}-${Date.now()}.zip"`);
-  res.send(archive);
+  return { archive, count: students.length };
 }
+
+export async function startQrPackageJob(req, res) {
+  const { Student } = getRequestModels(req);
+  const jobId = crypto.randomUUID();
+  const job = { owner: String(req.user._id), status: 'processing', percent: 0, count: 0, archive: null, error: '', createdAt: Date.now() };
+  qrPackageJobs.set(jobId, job);
+  const filter = studentFilterFromRequest(req);
+  setImmediate(async () => {
+    try {
+      const result = await buildQrArchive(Student, filter, (percent, count) => Object.assign(job, { percent, count }));
+      Object.assign(job, { archive: result.archive, count: result.count, percent: 100, status: 'ready' });
+    } catch (error) {
+      Object.assign(job, { status: 'failed', error: error.message || 'QR package generation failed' });
+    }
+  });
+  res.status(202).json({ jobId });
+}
+
+export function getQrPackageJob(req, res) {
+  const job = jobForRequest(req);
+  res.json({ status: job.status, percent: job.percent, count: job.count, error: job.error });
+}
+
+export function downloadQrPackageJob(req, res) {
+  const job = jobForRequest(req);
+  if (job.status !== 'ready' || !job.archive) throw new HttpError(409, 'QR package is not ready');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="gehu-gate-pass-package-${job.count}-${Date.now()}.zip"`);
+  res.setHeader('Content-Length', job.archive.length);
+  res.send(job.archive);
+  qrPackageJobs.delete(String(req.params.jobId));
+}
+
+setInterval(() => { const cutoff = Date.now() - 30 * 60_000; for (const [id, job] of qrPackageJobs) if (job.createdAt < cutoff) qrPackageJobs.delete(id); }, 10 * 60_000).unref();
 
 export async function openPublicStudentQr(req, res) {
   const tokenHash = String(req.params.tokenHash || '').trim().toLowerCase();

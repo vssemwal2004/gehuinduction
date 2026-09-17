@@ -14,12 +14,14 @@ import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import {
   commitStudentImport,
-  downloadQrPackage,
+  downloadQrPackageJob,
   downloadStudentQr,
   downloadStudentTemplate,
   exportStudentsExcel,
   listImportHistory,
   previewStudentImport,
+  getQrPackageJob,
+  startQrPackageJob,
 } from '../controllers/studentImportController.js';
 
 const router = Router();
@@ -40,7 +42,9 @@ router.post('/import/commit', importLimiter, upload.single('file'), asyncHandler
 router.get('/import/history', asyncHandler(listImportHistory));
 router.get('/config/options', asyncHandler(getStudentOptions));
 router.get('/export.xlsx', asyncHandler(exportStudentsExcel));
-router.get('/qr-package.zip', qrPackageLimiter, asyncHandler(downloadQrPackage));
+router.post('/qr-package/jobs', qrPackageLimiter, asyncHandler(startQrPackageJob));
+router.get('/qr-package/jobs/:jobId', asyncHandler(getQrPackageJob));
+router.get('/qr-package/jobs/:jobId/download', asyncHandler(downloadQrPackageJob));
 router.get('/:studentId/qr.png', asyncHandler(downloadStudentQr));
 router.get('/', asyncHandler(listStudents));
 router.post('/', asyncHandler(createStudent));

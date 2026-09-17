@@ -75,6 +75,18 @@ export async function createStudentQrCardJpeg(token) {
   return jpeg.encode({ data: png.data, width: png.width, height: png.height }, 88).data;
 }
 
+export async function createCompactStudentQrCardJpeg(token) {
+  const base = jpeg.decode(compactTemplateJpeg(), { useTArray: true, formatAsRGBA: true });
+  const card = { width: base.width, height: base.height, data: Buffer.from(base.data) };
+  const compactBox = { x: 126, y: 318, size: 260 };
+  const qrBuffer = await QRCode.toBuffer(`GEUQR1:${token}`, {
+    type: 'png', errorCorrectionLevel: 'H', width: compactBox.size, margin: 2,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+  drawImage(PNG.sync.read(qrBuffer), card, compactBox);
+  return jpeg.encode(card, 82).data;
+}
+
 export function compactTemplateJpeg() {
   if (cachedCompactTemplateJpeg) return cachedCompactTemplateJpeg;
   const source = template();
